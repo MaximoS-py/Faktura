@@ -1,0 +1,14 @@
+# Databáze a lokální data
+faktury.db
+faktury.db-journal
+
+# Konfigurace s hesly (citlivé údaje)
+config.py
+
+# Nahrávaná loga klientů
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Python cache
+__pycache__/
+*.pyc
