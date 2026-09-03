@@ -58,11 +58,16 @@ def login_required(f):
 @app.route('/get-qr')
 def get_qr():
     """Generuje QR platbu přes oficiální bezplatné API qr-platba.cz."""
+    # Načteme parametry z URL adresy obrázku
     account = request.args.get('account', '')
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
 
+    # KLÍČOVÁ OPRAVA: Odstraníme z čísla účtu lomítko a nahradíme ho hvězdičkou (např. 123/0100 -> 123*0100)
+    # Tím zajistíme, že API qr-platba.cz požadavek správně zpracuje a vrátí obrázek
     formatted_account = account.replace('/', '*')
+    
+    # Sestavení správného dotazu na API
     qr_string = f"https://qr-platba.cz{formatted_account}&amount={amount}&currency=CZK&vs={vs}"
     
     try:
@@ -73,6 +78,7 @@ def get_qr():
         print(f"Chyba při stahování QR kódu: {e}")
         
     return "QR kód se nepodařilo vygenerovat", 500
+
 
 
 @app.route('/register', methods=['GET', 'POST'])
