@@ -2,6 +2,7 @@ import os
 import io
 import requests
 import smtplib
+import urllib.parse  # Pro správné kódování znaků
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -24,7 +25,7 @@ os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
 # Inicializace struktury DB
 init_db()
 
-# AUTOMATICKÁ AKTUALIZACE DATABÁZE (Vytvoření tabulky uživatelů a úprava sloupců)
+# AUTOMATICKÁ AKTUALIZACE DATABÁZE
 conn = get_db()
 conn.execute('''
     CREATE TABLE IF NOT EXISTS uzivatele (
@@ -57,22 +58,22 @@ def login_required(f):
 
 @app.route('/get-qr')
 def get_qr():
-    """Generuje nativní a čitelný QR kód platebního příkazu pro české banky."""
+    """Generuje QR platbu přes oficiální bezplatné API s opraveným kódováním textu."""
     account = request.args.get('account', '')
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
 
-    # Formátování čísla účtu (náhrada lomítka za hvězdičku podle standardu ČBA)
+    # Formátování čísla účtu (náhrada lomítka za hvězdičku)
     formatted_account = account.replace('/', '*')
     
-    # Sestavení oficiálního formátu Short Payment Descriptor (SPD)
+    # Sestavení bankovního řetězce
     payment_data = f"SPD*1.0*ACC:{formatted_account}*AM:{amount}*CC:CZK*X-VS:{vs}"
     
-    # Bezpečné zakódování textu pro internetovou URL adresu, aby ho banka správně přečetla
-    safe_payment_data = requests.utils.quote(payment_data)
+    # NEJDŮLEŽITĚJŠÍ OPRAVA: Převedeme hvězdičky a text na formát bezpečný pro internet (%2A atd.)
+    # Bez tohohle bankovní aplikace text uvnitř obrázku nepřečte!
+    encoded_data = urllib.parse.quote(payment_data, safe='')
     
-    # Stažení hotového generovaného QR kódu
-    qr_url = f"https://qrserver.com{safe_payment_data}"
+    qr_url = f"https://qrserver.com{encoded_data}"
     
     try:
         response = requests.get(qr_url, timeout=5)
@@ -119,7 +120,6 @@ def register():
             conn.close()
             
     return render_template('register.html')
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -246,7 +246,7 @@ def nova_faktura():
             conn.execute('''
                 INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
                 VALUES (?, ?, ?, ?, ?)
-            ''', (faktura_id, p[0], p[1], p[2], p[3]))
+            ''', (faktura_id, p, p, p, p))
             
         conn.commit()
         conn.close()
