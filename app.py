@@ -12,7 +12,10 @@ from werkzeug.utils import secure_filename
 from xhtml2pdf import pisa
 
 # Načtení externích modulů
-import config
+try:
+    import config
+except ModuleNotFoundError:
+    import config_render as config
 from database import get_db, init_db
 
 app = Flask(__name__)
