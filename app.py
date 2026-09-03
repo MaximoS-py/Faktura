@@ -57,44 +57,43 @@ def login_required(f):
 
 @app.route('/get-qr')
 def get_qr():
-    """Generuje QR platbu tím, že české číslo účtu nejprve převede na požadovaný IBAN."""
+    """Generuje QR platbu a bezpečně zpracuje jakýkoliv český formát čísla účtu."""
     account = request.args.get('account', '')
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
 
-    # 1. ROZDĚLENÍ ČÍSLA ÚČTU NA PŘEDČÍSLÍ, ČÍSLO A KÓD BANKY
-    # Ošetříme případné mezery nebo neplechu v textu
+    # Odstraníme přebytečné mezery
     account_clean = account.replace(" ", "")
     
     try:
+        # 1. ROZDĚLENÍ NA ČÍSLO ÚČTU A KÓD BANKY
         if "/" in account_clean:
-            base_part, bank_code = account_clean.split("/")
-            if "-" in base_part:
-                prefix, account_number = base_part.split("-")
-            else:
-                prefix = "000000"
-                account_number = base_part
+            prefix_and_number, bank_code = account_clean.split("/")
         else:
-            # Pokud by lomítko chybělo, zkusíme záložní plán
             bank_code = "0000"
-            prefix = "000000"
-            account_number = account_clean
+            prefix_and_number = account_clean
 
-        # Vyplníme nuly zleva, aby délka přesně odpovídala bankovním standardům
+        # 2. ROZDĚLENÍ NA PŘEDČÍSLÍ A SAMOTNÉ ČÍSLO
+        if "-" in prefix_and_number:
+            prefix, account_number = prefix_and_number.split("-")
+        else:
+            prefix = "0"
+            account_number = prefix_and_number
+
+        # 3. DOPLNĚNÍ NUL PODLE BANKOVNÍCH STANDARDŮ (Předčíslí 6 míst, číslo 10 míst, banka 4 místa)
         prefix_padded = prefix.zfill(6)
         account_padded = account_number.zfill(10)
         bank_padded = bank_code.zfill(4)
 
-        # 2. AUTOMATICKÝ VÝPOČET KONTROLNÍHO SOUČTU PRO IBAN
-        # Převod na číselnou reprezentaci země (CZ = 1235)
+        # 4. VÝPOČET KONTROLNÍHO SOUČTU PRO IBAN (Země: CZ = 1235)
         iban_digits = f"{bank_padded}{prefix_padded}{account_padded}123500"
         remainder = int(iban_digits) % 97
         check_digits = str(98 - remainder).zfill(2)
 
-        # Sestavení finálního platného IBANu pro API
+        # Výsledný sestavený IBAN
         iban = f"CZ{check_digits}{bank_padded}{prefix_padded}{account_padded}"
         
-        # Sestavení čisté adresy pro API qr-platba.cz
+        # Sestavení čistého dotazu na bezplatné API qr-platba.cz
         qr_string = f"https://qr-platba.cz{iban}&amount={amount}&currency=CZK&vs={vs}"
         
         response = requests.get(qr_string, timeout=5)
@@ -102,7 +101,7 @@ def get_qr():
             return send_file(io.BytesIO(response.content), mimetype='image/png')
             
     except Exception as e:
-        print(f"Chyba při konverzi na IBAN nebo generování QR: {e}")
+        print(f"Chyba při generování QR nebo IBAN: {e}")
         
     return "QR kód se nepodařilo vygenerovat", 500
 
