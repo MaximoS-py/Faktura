@@ -133,11 +133,75 @@ def profil():
     conn.close()
     return render_template('profil.html', profil=data_profilu)
 
+@app.route('/nova-faktura', methods=['GET', 'POST'])
+@login_required
+def nova_faktura():
+    conn = get_db()
+    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    
+    if request.method == 'POST':
+        cislo = request.form['cislo_faktury']
+        vystaveni = request.form['datum_vystaveni']
+        splatnost = request.form['datum_splatnosti']
+        o_firma = request.form['odberatel_firma']
+        o_adresa = request.form['odberatel_adresa']
+        o_ico = request.form['odberatel_ico']
+        o_email = request.form['odberatel_email']
+        forma_uhrady = request.form['forma_uhrady']
+        prenesena_dan = request.form.get('prenesena_dan', 'NE')
+        stav = "Nezaplaceno"
+        
+        popisy = request.form.getlist('popis[]')
+        mnozstvi_list = request.form.getlist('mnozstvi[]')
+        ceny_list = request.form.getlist('cena[]')
+        dph_list = request.form.getlist('dph[]')
+        
+        total_price = 0
+        polozky_to_save = []
+        
+        for i in range(len(popisy)):
+            if popisy[i].strip() != '':
+                mnozstvi = float(mnozstvi_list[i]) if mnozstvi_list[i] else 0
+                cena = float(ceny_list[i]) if ceny_list[i] else 0
+                sazba_dph = float(dph_list[i]) if i < len(dph_list) else 21.0
+                
+                zaklad = mnozstvi * cena
+                if prenesena_dan == 'ANO':
+                    cena_s_dph = zaklad
+                else:
+                    cena_s_dph = zaklad * (1 + (sazba_dph / 100))
+                
+                total_price += cena_s_dph
+                polozky_to_save.append((popisy[i], mnozstvi, cena, sazba_dph))
+        
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO faktury (uzivatel, cislo_faktury, datum_vystaveni, datum_splatnosti, odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email, forma_uhrady, stav, prenesena_dan, total_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (aktualni_uzivatel, cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
+        faktura_id = cursor.lastrowid
+        
+        # OPAVENÝ CYKLUS: Hodnoty se z tuple rozbalují pod správnými indexy
+        for p in polozky_to_save:
+            conn.execute('''
+                INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (faktura_id, p[0], p[1], p[2], p[3]))
+            
+        conn.commit()
+        conn.close()
+        return redirect(url_for('faktura_detail', id=faktura_id))
+
+    data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+    conn.close()
+    return render_template('formular.html', profil=data_profilu)
+
 @app.route('/faktura/<int:id>')
 @login_required
 def faktura_detail(id):
     conn = get_db()
-    faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, session['uzivatel'])).fetchone()
+    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, aktualni_uzivatel)).fetchone()
     
     if not faktura:
         conn.close()
@@ -145,7 +209,7 @@ def faktura_detail(id):
         return redirect(url_for('index'))
         
     polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
-    profil_data = conn.execute('SELECT * FROM profil WHERE id=1').fetchone()
+    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
     conn.close()
     return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data)
 
@@ -176,9 +240,10 @@ def zmenit_stav(id):
 @login_required
 def odeslat_email(id):
     conn = get_db()
+    aktualni_uzivatel = session.get('uzivatel', 'admin')
     faktura = conn.execute('SELECT * FROM faktury WHERE id=?', (id,)).fetchone()
     polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
-    profil_data = conn.execute('SELECT * FROM profil WHERE id=1').fetchone()
+    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
     conn.close()
 
     if not faktura['odberatel_email']:
@@ -228,3 +293,4 @@ def odeslat_email(id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
