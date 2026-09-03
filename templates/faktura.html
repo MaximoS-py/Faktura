@@ -321,13 +321,10 @@
         </div>
 <div class="qr-kod-kontejner">
     <h3>QR platba</h3>
-    {% if qr_override %}
-        <img src="{{ qr_override }}" alt="QR Platba" width="160" height="160" style="display: block; margin: 10px 0;">
-    {% else %}
-        <p>QR kód není k dispozici</p>
-    {% endif %}
+    <img src="https://qrserver.com:{{ profil.ucet | replace('/', '*') }}*AM:{{ faktura.total_price }}*CC:CZK*X-VS:{{ faktura.cislo_faktury }}" alt="QR Platba" width="160" height="160" style="display: block; margin: 10px 0;">
     <p>Pro rychlou úhradu naskenujte tento QR kód ve své bankovní aplikaci.</p>
 </div>
+
 
 </body>
 
