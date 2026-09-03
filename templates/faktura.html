@@ -321,10 +321,9 @@
         </div>
 <div class="qr-kod-kontejner">
     <h3>QR platba</h3>
-    <img src="https://qrserver.com:{{ profil.ucet | replace('/', '*') }}*AM:{{ faktura.total_price }}*CC:CZK*X-VS:{{ faktura.cislo_faktury }}" alt="QR Platba" width="160" height="160" style="display: block; margin: 10px 0;">
+    <img src="{{ url_for('get_qr', account=profil.ucet, amount=faktura.total_price, vs=faktura.cislo_faktury) }}" alt="QR Platba" width="160" height="160" style="display: block; margin: 10px 0;">
     <p>Pro rychlou úhradu naskenujte tento QR kód ve své bankovní aplikaci.</p>
 </div>
-
 
 </body>
 
