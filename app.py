@@ -250,18 +250,57 @@ def get_qr():
     account_info = request.args.get('account', '')
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
+
     try:
         account_number, bank_code = account_info.split('/')
-        spayd = f"SPD*1.0*ACC:{bank_code}*{account_number}*AM:{float(amount):.2f}*CC:CZK*X-VS:{vs}*MSG:Platba faktury"
+
+        # Český účet -> IBAN
+        account_number = account_number.zfill(10)
+        bban = bank_code + "000000" + account_number
+
+        # Výpočet kontrolního čísla IBAN
+        temp = bban + "121400"
+        remainder = 0
+
+        for char in temp:
+            remainder = (remainder * 10 + int(char)) % 97
+
+        check_digits = 98 - remainder
+        iban = f"CZ{check_digits:02d}{bban}"
+
+        # QR Platba / SPAYD
+        spayd = (
+            f"SPD*1.0"
+            f"*ACC:{iban}"
+            f"*AM:{float(amount):.2f}"
+            f"*CC:CZK"
+            f"*X-VS:{vs}"
+            f"*MSG:Platba faktury"
+        )
+
         import qrcode
-        qr = qrcode.QRCode(version=1, box_size=10, border=1)
+
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=10,
+            border=4
+        )
+
         qr.add_data(spayd)
         qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
+
+        img = qr.make_image(
+            fill_color="black",
+            back_color="white"
+        )
+
         img_io = io.BytesIO()
-        img.save(img_io, 'PNG')
+        img.save(img_io, format='PNG')
         img_io.seek(0)
+
         return send_file(img_io, mimetype='image/png')
+
     except Exception as e:
         return f"Chyba: {str(e)}", 400
 
