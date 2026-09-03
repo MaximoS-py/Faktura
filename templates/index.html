@@ -2,6 +2,7 @@
 <html lang="cs">
 
 <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Přehled faktur</title>
@@ -157,6 +158,12 @@
             margin-bottom: 20px;
             font-weight: bold;
         }
+        @media (max-width: 768px) {
+    .container, main, form, table { width: 100% !important; max-width: 100% !important; padding: 10px !important; box-sizing: border-box; }
+    input, select, textarea, button, .btn { width: 100% !important; min-height: 48px !important; font-size: 16px !important; margin-bottom: 10px !important; }
+    table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
     </style>
 </head>
 
