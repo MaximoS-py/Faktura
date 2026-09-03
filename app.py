@@ -23,6 +23,17 @@ os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
 # Inicializace struktury DB
 init_db()
 
+# AUTOMATICKÁ OPRAVA DATABÁZE pro Render: Přidá sloupec 'uzivatel', pokud neexistuje
+try:
+    conn = get_db()
+    conn.execute('ALTER TABLE faktury ADD COLUMN uzivatel TEXT DEFAULT "admin";')
+    conn.commit()
+    conn.close()
+    print("Sloupec 'uzivatel' byl úspěšně přidán do databáze.")
+except Exception as e:
+    # Pokud sloupec už existuje, SQLite vyhodí chybu – tu bezpečně ignorujeme
+    pass
+
 def login_required(f):
     def wrapper(*args, **kwargs):
         if 'logged_in' not in session:
@@ -110,6 +121,7 @@ def profil():
     data_profilu = conn.execute('SELECT * FROM profil WHERE id=1').fetchone()
     conn.close()
     return render_template('profil.html', profil=data_profilu)
+
 @app.route('/nova-faktura', methods=['GET', 'POST'])
 @login_required
 def nova_faktura():
