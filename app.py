@@ -103,7 +103,7 @@ def nova_faktura():
         popisy = request.form.getlist('popis[]')
         mnozstvi_list = request.form.getlist('mnozstvi[]')
         ceny_list = request.form.getlist('cena[]')
-        dph_list = request.form.getlist('dph[]')  # Načtení DPH pro každou položku
+        dph_list = request.form.getlist('dph[]')
         
         total_price = 0
         polozky_to_save = []
@@ -114,10 +114,9 @@ def nova_faktura():
                 cena = float(ceny_list[i]) if ceny_list[i] else 0
                 sazba_dph = float(dph_list[i]) if i < len(dph_list) else 21.0
                 
-                # Výpočet celkové ceny položky na základě DPH
                 zaklad = mnozstvi * cena
                 if prenesena_dan == 'ANO':
-                    cena_s_dph = zaklad  # Daň se nepřipočítává
+                    cena_s_dph = zaklad
                 else:
                     cena_s_dph = zaklad * (1 + (sazba_dph / 100))
                 
@@ -145,8 +144,6 @@ def nova_faktura():
     conn.close()
     return render_template('formular.html', profil=data_profilu)
 
-
-# Jméno funkce je přesně faktura_detail, což opravuje BuildError z obrázku
 @app.route('/faktura/<int:id>')
 @login_required
 def faktura_detail(id):
@@ -194,7 +191,15 @@ def odeslat_email(id):
         return redirect(url_for('faktura_detail', id=id))
 
     try:
-        qr_url = f"https://googleapis.com:{profil_data['ucet'].replace('/', '*')}*AM:{faktura['total_price']}*CC:CZK*X-VS:{faktura['cislo_faktury']}"
+        # Dynamické sestavení URL pro QR kód (bude fungovat v šabloně i v PDF generátoru)
+        qr_url = url_for(
+            'get_qr',
+            account=profil_data['ucet'],
+            amount=faktura['total_price'],
+            vs=faktura['cislo_faktury'],
+            _external=True
+        )
+        
         html_rendered = render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data, qr_override=qr_url)
         
         pdf_buffer = io.BytesIO()
@@ -215,94 +220,17 @@ def odeslat_email(id):
         part.add_header('Content-Disposition', f"attachment; filename=faktura_{faktura['cislo_faktury']}.pdf")
         msg.attach(part)
 
-        with smtplib.SMTP_SSL(config.SMTP_SERVER, config.SMTP_PORT) as server:
-            server.login(config.SMTP_UZIVATEL, config.SMTP_HESLO)
-            server.sendmail(config.SMTP_UZIVATEL, faktura['odberatel_email'], msg.as_string())
+        server = smtplib.SMTP(config.SMTP_SERVER, config.SMTP_PORT)
+        server.starttls()
+        server.login(config.SMTP_UZIVATEL, config.SMTP_HESLO)
+        server.sendmail(config.SMTP_UZIVATEL, faktura['odberatel_email'], msg.as_string())
+        server.quit()
 
-        flash(f"Faktura byla odeslána na e-mail {faktura['odberatel_email']}", 'success')
+        flash('E-mail s fakturou byl úspěšně odeslán.', 'success')
     except Exception as e:
         flash(f"Chyba při odesílání e-mailu: {str(e)}", 'error')
 
     return redirect(url_for('faktura_detail', id=id))
 
-@app.route('/ares/<ico>')
-@login_required
-def ares_proxy(ico):
-    if not ico.isdigit() or len(ico) != 8:
-        return jsonify({'error': 'Neplatný formát IČO'}), 400
-    try:
-        url = f"https://ares.gov.cz{ico}"
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            sidlo = data.get('sidlo', {})
-            ulice = sidlo.get('nazevUlice', sidlo.get('nazevObce', ''))
-            cislo_p = sidlo.get('cisloDomovni', '')
-            cislo_o = sidlo.get('cisloOrientacni', '')
-            adresa = f"{ulice} {cislo_p}/{cislo_o}\n{sidlo.get('psc', '')} {sidlo.get('nazevObce', '')}"
-            return jsonify({'firma': data.get('obchodniJmeno', ''), 'adresa': adresa})
-        return jsonify({'error': 'Subjekt nenalezen'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/qr')
-def get_qr():
-    account_info = request.args.get('account', '')
-    amount = request.args.get('amount', '0')
-    vs = request.args.get('vs', '')
-
-    try:
-        account_number, bank_code = account_info.split('/')
-
-        # Český účet -> IBAN
-        account_number = account_number.zfill(10)
-        bban = bank_code + "000000" + account_number
-
-        # Výpočet kontrolního čísla IBAN
-        temp = bban + "121400"
-        remainder = 0
-
-        for char in temp:
-            remainder = (remainder * 10 + int(char)) % 97
-
-        check_digits = 98 - remainder
-        iban = f"CZ{check_digits:02d}{bban}"
-
-        # QR Platba / SPAYD
-        spayd = (
-            f"SPD*1.0"
-            f"*ACC:{iban}"
-            f"*AM:{float(amount):.2f}"
-            f"*CC:CZK"
-            f"*X-VS:{vs}"
-            f"*MSG:Platba faktury"
-        )
-
-        import qrcode
-
-        qr = qrcode.QRCode(
-            version=None,
-            error_correction=qrcode.constants.ERROR_CORRECT_M,
-            box_size=10,
-            border=4
-        )
-
-        qr.add_data(spayd)
-        qr.make(fit=True)
-
-        img = qr.make_image(
-            fill_color="black",
-            back_color="white"
-        )
-
-        img_io = io.BytesIO()
-        img.save(img_io, format='PNG')
-        img_io.seek(0)
-
-        return send_file(img_io, mimetype='image/png')
-
-    except Exception as e:
-        return f"Chyba: {str(e)}", 400
-
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True)
