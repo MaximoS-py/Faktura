@@ -156,10 +156,11 @@ def nova_faktura():
         faktura_id = cursor.lastrowid
         
         for p in polozky_to_save:
-            conn.execute('''
-                INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (faktura_id, p[0], p[1], p[2], p[3]))
+    conn.execute('''
+        INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (faktura_id, p[0], p[1], p[2], p[3]))  # <--- SPRÁVNĚ: Rozbalení indexů n-tice
+
             
         conn.commit()
         conn.close()
