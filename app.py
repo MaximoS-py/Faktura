@@ -2,7 +2,7 @@ import os
 import io
 import requests
 import smtplib
-import urllib.parse  # Pro správné kódování znaků
+import urllib.parse
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -25,26 +25,39 @@ os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
 # Inicializace struktury DB
 init_db()
 
-# AUTOMATICKÁ AKTUALIZACE DATABÁZE
-conn = get_db()
-conn.execute('''
-    CREATE TABLE IF NOT EXISTS uzivatele (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL
-    )
-''')
+# AUTOMATICKÁ AKTUALIZACE DATABÁZE (Bezpečně ošetřená)
 try:
-    conn.execute('ALTER TABLE faktury ADD COLUMN uzivatel TEXT DEFAULT "admin";')
+    conn = get_db()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS uzivatele (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
 except Exception:
     pass
+finally:
+    if 'conn' in locals(): conn.close()
 
 try:
-    conn.execute('ALTER TABLE profil ADD COLUMN uzivatel TEXT DEFAULT "admin";')
+    conn = get_db()
+    conn.execute('ALTER TABLE faktury ADD COLUMN uzivatel TEXT DEFAULT "admin";')
+    conn.commit()
 except Exception:
     pass
-conn.commit()
-conn.close()
+finally:
+    if 'conn' in locals(): conn.close()
+
+try:
+    conn = get_db()
+    conn.execute('ALTER TABLE profil ADD COLUMN uzivatel TEXT DEFAULT "admin";')
+    conn.commit()
+except Exception:
+    pass
+finally:
+    if 'conn' in locals(): conn.close()
 
 
 def login_required(f):
@@ -63,14 +76,8 @@ def get_qr():
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
 
-    # Formátování čísla účtu (náhrada lomítka za hvězdičku)
     formatted_account = account.replace('/', '*')
-    
-    # Sestavení bankovního řetězce
     payment_data = f"SPD*1.0*ACC:{formatted_account}*AM:{amount}*CC:CZK*X-VS:{vs}"
-    
-    # NEJDŮLEŽITĚJŠÍ OPRAVA: Převedeme hvězdičky a text na formát bezpečný pro internet (%2A atd.)
-    # Bez tohohle bankovní aplikace text uvnitř obrázku nepřečte!
     encoded_data = urllib.parse.quote(payment_data, safe='')
     
     qr_url = f"https://qrserver.com{encoded_data}"
@@ -154,7 +161,6 @@ def logout():
 def index():
     conn = get_db()
     aktualni_uzivatel = session.get('uzivatel', 'admin')
-    
     faktury = conn.execute(
         'SELECT * FROM faktury WHERE uzivatel = ? ORDER BY id DESC', 
         (aktualni_uzivatel,)
@@ -235,25 +241,36 @@ def nova_faktura():
                 total_price += cena_s_dph
                 polozky_to_save.append((popisy[i], mnozstvi, cena, sazba_dph))
         
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO faktury (uzivatel, cislo_faktury, datum_vystaveni, datum_splatnosti, odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email, forma_uhrady, stav, prenesena_dan, total_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (aktualni_uzivatel, cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
-        faktura_id = cursor.lastrowid
-        
-        for p in polozky_to_save:
-            conn.execute('''
-                INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (faktura_id, p, p, p, p))
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO faktury (uzivatel, cislo_faktury, datum_vystaveni, datum_splatnosti, odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email, forma_uhrady, stav, prenesena_dan, total_price)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (aktualni_uzivatel, cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
+            faktura_id = cursor.lastrowid
             
-        conn.commit()
-        conn.close()
-        return redirect(url_for('faktura_detail', id=faktura_id))
+            # Opravený a bezpečný zápis jednotlivých položek faktury
+            for p in polozky_to_save:
+                conn.execute('''
+                    INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (faktura_id, p[0], p[1], p[2], p[3]))
+                
+            conn.commit()
+            return redirect(url_for('faktura_detail', id=faktura_id))
+        except Exception as e:
+            print(f"Chyba při zápisu faktury: {e}")
+            flash("Chyba při ukládání faktury do databáze.", "error")
+        finally:
+            conn.close()
 
-    data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
-    conn.close()
+    try:
+        data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+    except Exception:
+        data_profilu = None
+    finally:
+        conn.close()
+        
     return render_template('formular.html', profil=data_profilu)
 
 @app.route('/faktura/<int:id>')
@@ -261,39 +278,42 @@ def nova_faktura():
 def faktura_detail(id):
     conn = get_db()
     aktualni_uzivatel = session.get('uzivatel', 'admin')
-    faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, aktualni_uzivatel)).fetchone()
-    
-    if not faktura:
+    try:
+        faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, aktualni_uzivatel)).fetchone()
+        if not faktura:
+            return redirect(url_for('index'))
+            
+        polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
+        profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+        return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data)
+    finally:
         conn.close()
-        flash('Faktura nebyla nalezena nebo k ní nemáte přístup.', 'error')
-        return redirect(url_for('index'))
-        
-    polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
-    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
-    conn.close()
-    return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data)
 
 @app.route('/faktura/<int:id>/smazat', methods=['POST'])
 @login_required
 def smazat_fakturu(id):
     conn = get_db()
-    conn.execute('DELETE FROM polozky_faktury WHERE faktura_id=?', (id,))
-    conn.execute('DELETE FROM faktury WHERE id=?', (id,))
-    conn.commit()
-    conn.close()
-    flash('Faktura byla úspěšně smazána.', 'success')
+    try:
+        conn.execute('DELETE FROM polozky_faktury WHERE faktura_id=?', (id,))
+        conn.execute('DELETE FROM faktury WHERE id=?', (id,))
+        conn.commit()
+        flash('Faktura byla úspěšně smazána.', 'success')
+    finally:
+        conn.close()
     return redirect(url_for('index'))
 
 @app.route('/faktura/<int:id>/zmenit-stav', methods=['POST'])
 @login_required
 def zmenit_stav(id):
     conn = get_db()
-    faktura = conn.execute('SELECT stav FROM faktury WHERE id=?', (id,)).fetchone()
-    novy_st = "Zaplaceno" if faktura['stav'] != "Zaplaceno" else "Nezaplaceno"
-    conn.execute('UPDATE faktury SET stav=? WHERE id=?', (novy_st, id))
-    conn.commit()
-    conn.close()
-    flash(f"Stav faktury změněn na: {novy_st}", 'success')
+    try:
+        faktura = conn.execute('SELECT stav FROM faktury WHERE id=?', (id,)).fetchone()
+        novy_st = "Zaplaceno" if faktura['stav'] != "Zaplaceno" else "Nezaplaceno"
+        conn.execute('UPDATE faktury SET stav=? WHERE id=?', (novy_st, id))
+        conn.commit()
+        flash(f"Stav faktury změněn na: {novy_st}", 'success')
+    finally:
+        conn.close()
     return redirect(url_for('index'))
 
 @app.route('/faktura/<int:id>/odeslat', methods=['POST'])
@@ -301,24 +321,19 @@ def zmenit_stav(id):
 def odeslat_email(id):
     conn = get_db()
     aktualni_uzivatel = session.get('uzivatel', 'admin')
-    faktura = conn.execute('SELECT * FROM faktury WHERE id=?', (id,)).fetchone()
-    polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
-    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
-    conn.close()
+    try:
+        faktura = conn.execute('SELECT * FROM faktury WHERE id=?', (id,)).fetchone()
+        polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
+        profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+    finally:
+        conn.close()
 
     if not faktura['odberatel_email']:
         flash('Chyba: Odběratel nemá vyplněný e-mail!', 'error')
         return redirect(url_for('faktura_detail', id=id))
 
     try:
-        qr_url = url_for(
-            'get_qr',
-            account=profil_data['ucet'],
-            amount=faktura['total_price'],
-            vs=faktura['cislo_faktury'],
-            _external=True
-        )
-        
+        qr_url = url_for('get_qr', account=profil_data['ucet'], amount=faktura['total_price'], vs=faktura['cislo_faktury'], _external=True)
         html_rendered = render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data, qr_override=qr_url)
         
         pdf_buffer = io.BytesIO()
@@ -353,3 +368,4 @@ def odeslat_email(id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
