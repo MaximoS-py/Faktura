@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrace dodavatele</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f9f9f9; }
+        .form-box { max-width: 400px; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: auto; }
+        input { width: 100%; padding: 8px; margin: 6px 0 16px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; }
+        button:hover { background: #218838; }
+        .error { color: red; margin-bottom: 15px; }
+        .success { color: green; margin-bottom: 15px; }
+        .section-title { font-weight: bold; color: #555; margin-top: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="form-box">
+    <h2>Registrace nového účtu</h2>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="{% if category == 'error' %}error{% else %}success{% endif %}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <div class="section-title">Přihlašovací údaje</div>
+        <label>Uživatelské jméno *</label>
+        <input type="text" name="username" placeholder="Např. novak" required>
+        
+        <label>Heslo *</label>
+        <input type="password" name="password" placeholder="TajnEHeSlo123" required>
+        
+        <div class="section-title">Firemní údaje (pro faktury)</div>
+        <label>Název firmy / Jméno</label>
+        <input type="text" name="firma" placeholder="Jan Novák - IT Služby">
+        
+        <label>IČO</label>
+        <input type="text" name="ico" placeholder="12345678">
+        
+        <label>Číslo účtu (včetně kódu banky)</label>
+        <input type="text" name="ucet" placeholder="123456789/0100">
+        
+        <button type="submit">Vytvořit účet dodavatele</button>
+    </form>
+    
+    <p style="text-align: center; margin-top: 20px;">
+        Již máte účet? <a href="{{ url_for('login') }}">Přihlaste se</a>
+    </p>
+</div>
+
+</body>
+</html>
