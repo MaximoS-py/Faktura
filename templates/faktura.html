@@ -320,6 +320,17 @@
         <div class="actions-panel">
             <button class="btn btn-print" onclick="window.print()">Vytisknout / Uložit do PDF</button>
         </div>
+<div class="qr-kod-kontejner">
+    <h3>QR platba</h3>
+    {% if qr_override %}
+        <!-- Použije se při generování PDF nebo zobrazení s override URL -->
+        <img src="{{ qr_override }}" alt="QR Platba" width="150" height="150">
+    {% else %}
+        <!-- Standardní zobrazení na webovém detailu faktury -->
+        <img src="{{ url_for('get_qr', account=profil.ucet, amount=faktura.total_price, vs=faktura.cislo_faktury) }}" alt="QR Platba" width="150" height="150">
+    {% endif %}
+    <p>Pro rychlou úhradu naskenujte tento QR kód ve své bankovní aplikaci.</p>
+</div>
 
 </body>
 
