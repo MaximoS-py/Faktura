@@ -293,7 +293,18 @@ def faktura_detail(id):
     polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
     profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
     conn.close()
-    return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data)
+
+    # FORMÁTOVÁNÍ PRO BANKU: Odstraníme lomítko a nahradíme hvězdičkou
+    formatted_account = profil_data['ucet'].replace('/', '*')
+    
+    # 1. Sestavení oficiálního textového řetězce, kterému banky rozumí
+    text_pro_banku = f"SPD*1.0*ACC:{formatted_account}*AM:{faktura['total_price']}*CC:CZK*X-VS:{faktura['cislo_faktury']}"
+    
+    # 2. Vytvoření rychlé adresy obrázku přes bezplatné a stabilní globální API
+    qr_url = f"https://qrserver.com{text_pro_banku}"
+
+    # Předáme opravenou URL přímo do šablony
+    return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data, qr_override=qr_url)
 
 @app.route('/faktura/<int:id>/smazat', methods=['POST'])
 @login_required
