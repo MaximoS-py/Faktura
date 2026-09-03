@@ -31,7 +31,6 @@ def login_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
-# === NOVÝ ENDPOINT PRO GENEROVÁNÍ QR KÓDU ===
 @app.route('/get-qr')
 def get_qr():
     """Generuje QR platbu přes oficiální bezplatné API qr-platba.cz."""
@@ -39,10 +38,7 @@ def get_qr():
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
 
-    # Odstranění lomítka z čísla účtu pro formát QR platby (např. 123456/0100 -> 123456*0100)
     formatted_account = account.replace('/', '*')
-    
-    # Sestavení řetězce pro QR platbu
     qr_string = f"https://qr-platba.cz{formatted_account}&amount={amount}&currency=CZK&vs={vs}"
     
     try:
@@ -52,15 +48,17 @@ def get_qr():
     except Exception as e:
         print(f"Chyba při stahování QR kódu: {e}")
         
-    # Záložní prázdná odpověď v případě výpadku API
     return "QR kód se nepodařilo vygenerovat", 500
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.form['username'] == 'admin' and request.form['password'] == 'admin123':
+        username = request.form['username']
+        password = request.form['password']
+        
+        if username == 'admin' and password == 'admin123':
             session['logged_in'] = True
+            session['uzivatel'] = username
             return redirect(url_for('index'))
         else:
             flash('Nesprávné přihlašovací údaje', 'error')
@@ -69,15 +67,19 @@ def login():
 @app.route('/logout')
 def logout():
     session.pop('logged_in', None)
+    session.pop('uzivatel', None)
     return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
-    faktury = conn.execute('SELECT * FROM faktury ORDER BY id DESC').fetchall()
+    faktury = conn.execute(
+        'SELECT * FROM faktury WHERE uzivatel = ? ORDER BY id DESC', 
+        (session['uzivatel'],)
+    ).fetchall()
     conn.close()
-    return render_template('index.html', faktu=faktury)
+    return render_template('index.html', faktury=faktury)
 
 @app.route('/profil', methods=['GET', 'POST'])
 @login_required
@@ -108,7 +110,6 @@ def profil():
     data_profilu = conn.execute('SELECT * FROM profil WHERE id=1').fetchone()
     conn.close()
     return render_template('profil.html', profil=data_profilu)
-
 @app.route('/nova-faktura', methods=['GET', 'POST'])
 @login_required
 def nova_faktura():
@@ -150,17 +151,16 @@ def nova_faktura():
         
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO faktury (cislo_faktury, datum_vystaveni, datum_splatnosti, odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email, forma_uhrady, stav, prenesena_dan, total_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
+            INSERT INTO faktury (uzivatel, cislo_faktury, datum_vystaveni, datum_splatnosti, odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email, forma_uhrady, stav, prenesena_dan, total_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (session['uzivatel'], cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
         faktura_id = cursor.lastrowid
         
         for p in polozky_to_save:
-    conn.execute('''
-        INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (faktura_id, p[0], p[1], p[2], p[3]))  # <--- SPRÁVNĚ: Rozbalení indexů n-tice
-
+            conn.execute('''
+                INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (faktura_id, p[0], p[1], p[2], p[3]))
             
         conn.commit()
         conn.close()
@@ -174,7 +174,13 @@ def nova_faktura():
 @login_required
 def faktura_detail(id):
     conn = get_db()
-    faktura = conn.execute('SELECT * FROM faktury WHERE id=?', (id,)).fetchone()
+    faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, session['uzivatel'])).fetchone()
+    
+    if not faktura:
+        conn.close()
+        flash('Faktura nebyla nalezena nebo k ní nemáte přístup.', 'error')
+        return redirect(url_for('index'))
+        
     polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
     profil_data = conn.execute('SELECT * FROM profil WHERE id=1').fetchone()
     conn.close()
@@ -217,7 +223,6 @@ def odeslat_email(id):
         return redirect(url_for('faktura_detail', id=id))
 
     try:
-        # Dynamické sestavení URL pro QR kód (bude fungovat v šabloně i v PDF generátoru)
         qr_url = url_for(
             'get_qr',
             account=profil_data['ucet'],
@@ -260,4 +265,3 @@ def odeslat_email(id):
 
 if __name__ == '__main__':
     app.run(debug=True)
-
