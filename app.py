@@ -57,53 +57,32 @@ def login_required(f):
 
 @app.route('/get-qr')
 def get_qr():
-    """Generuje QR platbu a bezpečně zpracuje jakýkoliv český formát čísla účtu."""
+    """Generuje nativní a čitelný QR kód platebního příkazu pro české banky."""
     account = request.args.get('account', '')
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
 
-    # Odstraníme přebytečné mezery
-    account_clean = account.replace(" ", "")
+    # Formátování čísla účtu (náhrada lomítka za hvězdičku podle standardu ČBA)
+    formatted_account = account.replace('/', '*')
+    
+    # Sestavení oficiálního formátu Short Payment Descriptor (SPD)
+    payment_data = f"SPD*1.0*ACC:{formatted_account}*AM:{amount}*CC:CZK*X-VS:{vs}"
+    
+    # Bezpečné zakódování textu pro internetovou URL adresu, aby ho banka správně přečetla
+    safe_payment_data = requests.utils.quote(payment_data)
+    
+    # Stažení hotového generovaného QR kódu
+    qr_url = f"https://qrserver.com{safe_payment_data}"
     
     try:
-        # 1. ROZDĚLENÍ NA ČÍSLO ÚČTU A KÓD BANKY
-        if "/" in account_clean:
-            prefix_and_number, bank_code = account_clean.split("/")
-        else:
-            bank_code = "0000"
-            prefix_and_number = account_clean
-
-        # 2. ROZDĚLENÍ NA PŘEDČÍSLÍ A SAMOTNÉ ČÍSLO
-        if "-" in prefix_and_number:
-            prefix, account_number = prefix_and_number.split("-")
-        else:
-            prefix = "0"
-            account_number = prefix_and_number
-
-        # 3. DOPLNĚNÍ NUL PODLE BANKOVNÍCH STANDARDŮ (Předčíslí 6 míst, číslo 10 míst, banka 4 místa)
-        prefix_padded = prefix.zfill(6)
-        account_padded = account_number.zfill(10)
-        bank_padded = bank_code.zfill(4)
-
-        # 4. VÝPOČET KONTROLNÍHO SOUČTU PRO IBAN (Země: CZ = 1235)
-        iban_digits = f"{bank_padded}{prefix_padded}{account_padded}123500"
-        remainder = int(iban_digits) % 97
-        check_digits = str(98 - remainder).zfill(2)
-
-        # Výsledný sestavený IBAN
-        iban = f"CZ{check_digits}{bank_padded}{prefix_padded}{account_padded}"
-        
-        # Sestavení čistého dotazu na bezplatné API qr-platba.cz
-        qr_string = f"https://qr-platba.cz{iban}&amount={amount}&currency=CZK&vs={vs}"
-        
-        response = requests.get(qr_string, timeout=5)
+        response = requests.get(qr_url, timeout=5)
         if response.status_code == 200:
             return send_file(io.BytesIO(response.content), mimetype='image/png')
-            
     except Exception as e:
-        print(f"Chyba při generování QR nebo IBAN: {e}")
+        print(f"Chyba při stahování QR kódu: {e}")
         
     return "QR kód se nepodařilo vygenerovat", 500
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -263,7 +242,6 @@ def nova_faktura():
         ''', (aktualni_uzivatel, cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
         faktura_id = cursor.lastrowid
         
-        # 100% OPRAVENÝ ROZBALENÝ CYKLUS POLOŽEK S SPRÁVNÝMI INDEXY
         for p in polozky_to_save:
             conn.execute('''
                 INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
@@ -293,18 +271,7 @@ def faktura_detail(id):
     polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
     profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
     conn.close()
-
-    # FORMÁTOVÁNÍ PRO BANKU: Odstraníme lomítko a nahradíme hvězdičkou
-    formatted_account = profil_data['ucet'].replace('/', '*')
-    
-    # 1. Sestavení oficiálního textového řetězce, kterému banky rozumí
-    text_pro_banku = f"SPD*1.0*ACC:{formatted_account}*AM:{faktura['total_price']}*CC:CZK*X-VS:{faktura['cislo_faktury']}"
-    
-    # 2. Vytvoření rychlé adresy obrázku přes bezplatné a stabilní globální API
-    qr_url = f"https://qrserver.com{text_pro_banku}"
-
-    # Předáme opravenou URL přímo do šablony
-    return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data, qr_override=qr_url)
+    return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data)
 
 @app.route('/faktura/<int:id>/smazat', methods=['POST'])
 @login_required
@@ -386,4 +353,3 @@ def odeslat_email(id):
 
 if __name__ == '__main__':
     app.run(debug=True)
-
