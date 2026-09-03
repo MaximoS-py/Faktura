@@ -57,29 +57,54 @@ def login_required(f):
 
 @app.route('/get-qr')
 def get_qr():
-    """Generuje QR platbu přes oficiální bezplatné API qr-platba.cz."""
-    # Načteme parametry z URL adresy obrázku
+    """Generuje QR platbu tím, že české číslo účtu nejprve převede na požadovaný IBAN."""
     account = request.args.get('account', '')
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
 
-    # KLÍČOVÁ OPRAVA: Odstraníme z čísla účtu lomítko a nahradíme ho hvězdičkou (např. 123/0100 -> 123*0100)
-    # Tím zajistíme, že API qr-platba.cz požadavek správně zpracuje a vrátí obrázek
-    formatted_account = account.replace('/', '*')
-    
-    # Sestavení správného dotazu na API
-    qr_string = f"https://qr-platba.cz{formatted_account}&amount={amount}&currency=CZK&vs={vs}"
+    # 1. ROZDĚLENÍ ČÍSLA ÚČTU NA PŘEDČÍSLÍ, ČÍSLO A KÓD BANKY
+    # Ošetříme případné mezery nebo neplechu v textu
+    account_clean = account.replace(" ", "")
     
     try:
+        if "/" in account_clean:
+            base_part, bank_code = account_clean.split("/")
+            if "-" in base_part:
+                prefix, account_number = base_part.split("-")
+            else:
+                prefix = "000000"
+                account_number = base_part
+        else:
+            # Pokud by lomítko chybělo, zkusíme záložní plán
+            bank_code = "0000"
+            prefix = "000000"
+            account_number = account_clean
+
+        # Vyplníme nuly zleva, aby délka přesně odpovídala bankovním standardům
+        prefix_padded = prefix.zfill(6)
+        account_padded = account_number.zfill(10)
+        bank_padded = bank_code.zfill(4)
+
+        # 2. AUTOMATICKÝ VÝPOČET KONTROLNÍHO SOUČTU PRO IBAN
+        # Převod na číselnou reprezentaci země (CZ = 1235)
+        iban_digits = f"{bank_padded}{prefix_padded}{account_padded}123500"
+        remainder = int(iban_digits) % 97
+        check_digits = str(98 - remainder).zfill(2)
+
+        # Sestavení finálního platného IBANu pro API
+        iban = f"CZ{check_digits}{bank_padded}{prefix_padded}{account_padded}"
+        
+        # Sestavení čisté adresy pro API qr-platba.cz
+        qr_string = f"https://qr-platba.cz{iban}&amount={amount}&currency=CZK&vs={vs}"
+        
         response = requests.get(qr_string, timeout=5)
         if response.status_code == 200:
             return send_file(io.BytesIO(response.content), mimetype='image/png')
+            
     except Exception as e:
-        print(f"Chyba při stahování QR kódu: {e}")
+        print(f"Chyba při konverzi na IBAN nebo generování QR: {e}")
         
     return "QR kód se nepodařilo vygenerovat", 500
-
-
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
