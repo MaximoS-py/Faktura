@@ -9,6 +9,7 @@ from email import encoders
 
 from flask import Flask, render_template, request, redirect, url_for, send_file, session, flash, jsonify
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 from xhtml2pdf import pisa
 
 # Načtení externích modulů
@@ -23,25 +24,30 @@ os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
 # Inicializace struktury DB
 init_db()
 
-# AUTOMATICKÁ OPRAVA DATABÁZE: Přidá sloupec 'uzivatel' do obou tabulek, pokud tam chybí
+# AUTOMATICKÁ AKTUALIZACE DATABÁZE (Vytvoření tabulky uživatelů a úprava sloupců)
 conn = get_db()
+conn.execute('''
+    CREATE TABLE IF NOT EXISTS uzivatele (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL
+    )
+''')
 try:
     conn.execute('ALTER TABLE faktury ADD COLUMN uzivatel TEXT DEFAULT "admin";')
-    conn.commit()
 except Exception:
     pass
 
 try:
     conn.execute('ALTER TABLE profil ADD COLUMN uzivatel TEXT DEFAULT "admin";')
-    conn.commit()
 except Exception:
     pass
+conn.commit()
 conn.close()
 
 
 def login_required(f):
     def wrapper(*args, **kwargs):
-        # BEZPEČNOSTNÍ KONTROLA: Pokud chybí příznak přihlášení nebo jméno uživatele, vymažeme session a jdeme na login
         if 'logged_in' not in session or 'uzivatel' not in session:
             session.clear()
             return redirect(url_for('login'))
@@ -68,30 +74,79 @@ def get_qr():
         
     return "QR kód se nepodařilo vygenerovat", 500
 
+
+# === REGISTRACE S ROZŠÍŘENÝMI FIREMNÍMI ÚDAJI ===
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username'].strip()
+        password = request.form['password']
+        firma = request.form['firma'].strip()
+        ico = request.form['ico'].strip()
+        ucet = request.form['ucet'].strip()
+        
+        if not username or not password:
+            flash('Uživatelské jméno a heslo jsou povinné!', 'error')
+            return render_template('register.html')
+            
+        hashed_password = generate_password_hash(password)
+        
+        conn = get_db()
+        try:
+            # 1. Uložení přihlašovacích údajů
+            conn.execute(
+                'INSERT INTO uzivatele (username, password_hash) VALUES (?, ?)',
+                (username, hashed_password)
+            )
+            # 2. Automatické předvyplnění firemního profilu z registračního formuláře
+            conn.execute('''
+                INSERT INTO profil (uzivatel, firma, ulice, mesto, ico, dic, ucet, logo) 
+                VALUES (?, ?, "", "", ?, "", ?, "")
+            ''', (username, firma, ico, ucet))
+            
+            conn.commit()
+            flash('Registrace byla úspěšná! Nyní se můžete přihlásit.', 'success')
+            return redirect(url_for('login'))
+        except Exception:
+            flash('Uživatelské jméno je již obsazené.', 'error')
+        finally:
+            conn.close()
+            
+    return render_template('register.html')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        username = request.form['username'].strip()
         password = request.form['password']
         
-        if username == 'admin' and password == 'admin123':
+        conn = get_db()
+        user = conn.execute('SELECT * FROM uzivatele WHERE username = ?', (username,)).fetchone()
+        conn.close()
+        
+        if user and check_password_hash(user['password_hash'], password):
+            session['logged_in'] = True
+            session['uzivatel'] = username
+            return redirect(url_for('index'))
+        elif username == 'admin' and password == 'admin123':
             session['logged_in'] = True
             session['uzivatel'] = username
             return redirect(url_for('index'))
         else:
             flash('Nesprávné přihlašovací údaje', 'error')
+            
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    session.clear()  # Bezpečně smaže celou session
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
-    # Bezpečné získání uživatele ze session (pokud by tam náhodou nebyl, dosadí se 'admin')
     aktualni_uzivatel = session.get('uzivatel', 'admin')
     
     faktury = conn.execute(
@@ -132,69 +187,6 @@ def profil():
     data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
     conn.close()
     return render_template('profil.html', profil=data_profilu)
-
-@app.route('/nova-faktura', methods=['GET', 'POST'])
-@login_required
-def nova_faktura():
-    conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel', 'admin')
-    
-    if request.method == 'POST':
-        cislo = request.form['cislo_faktury']
-        vystaveni = request.form['datum_vystaveni']
-        splatnost = request.form['datum_splatnosti']
-        o_firma = request.form['odberatel_firma']
-        o_adresa = request.form['odberatel_adresa']
-        o_ico = request.form['odberatel_ico']
-        o_email = request.form['odberatel_email']
-        forma_uhrady = request.form['forma_uhrady']
-        prenesena_dan = request.form.get('prenesena_dan', 'NE')
-        stav = "Nezaplaceno"
-        
-        popisy = request.form.getlist('popis[]')
-        mnozstvi_list = request.form.getlist('mnozstvi[]')
-        ceny_list = request.form.getlist('cena[]')
-        dph_list = request.form.getlist('dph[]')
-        
-        total_price = 0
-        polozky_to_save = []
-        
-        for i in range(len(popisy)):
-            if popisy[i].strip() != '':
-                mnozstvi = float(mnozstvi_list[i]) if mnozstvi_list[i] else 0
-                cena = float(ceny_list[i]) if ceny_list[i] else 0
-                sazba_dph = float(dph_list[i]) if i < len(dph_list) else 21.0
-                
-                zaklad = mnozstvi * cena
-                if prenesena_dan == 'ANO':
-                    cena_s_dph = zaklad
-                else:
-                    cena_s_dph = zaklad * (1 + (sazba_dph / 100))
-                
-                total_price += cena_s_dph
-                polozky_to_save.append((popisy[i], mnozstvi, cena, sazba_dph))
-        
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO faktury (uzivatel, cislo_faktury, datum_vystaveni, datum_splatnosti, odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email, forma_uhrady, stav, prenesena_dan, total_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (aktualni_uzivatel, cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
-        faktura_id = cursor.lastrowid
-        
-        # OPAVENÝ CYKLUS: Hodnoty se z tuple rozbalují pod správnými indexy
-        for p in polozky_to_save:
-            conn.execute('''
-                INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (faktura_id, p[0], p[1], p[2], p[3]))
-            
-        conn.commit()
-        conn.close()
-        return redirect(url_for('faktura_detail', id=faktura_id))
-
-    data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
-    conn.close()
-    return render_template('formular.html', profil=data_profilu)
 
 @app.route('/faktura/<int:id>')
 @login_required
