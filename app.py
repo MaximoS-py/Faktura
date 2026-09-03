@@ -41,7 +41,9 @@ conn.close()
 
 def login_required(f):
     def wrapper(*args, **kwargs):
-        if 'logged_in' not in session:
+        # BEZPEČNOSTNÍ KONTROLA: Pokud chybí příznak přihlášení nebo jméno uživatele, vymažeme session a jdeme na login
+        if 'logged_in' not in session or 'uzivatel' not in session:
+            session.clear()
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
@@ -82,17 +84,19 @@ def login():
 
 @app.route('/logout')
 def logout():
-    session.pop('logged_in', None)
-    session.pop('uzivatel', None)
+    session.clear()  # Bezpečně smaže celou session
     return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
+    # Bezpečné získání uživatele ze session (pokud by tam náhodou nebyl, dosadí se 'admin')
+    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    
     faktury = conn.execute(
         'SELECT * FROM faktury WHERE uzivatel = ? ORDER BY id DESC', 
-        (session['uzivatel'],)
+        (aktualni_uzivatel,)
     ).fetchall()
     conn.close()
     return render_template('index.html', faktury=faktury)
@@ -101,6 +105,8 @@ def index():
 @login_required
 def profil():
     conn = get_db()
+    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    
     if request.method == 'POST':
         firma = request.form['firma']
         ulice = request.form['ulice']
@@ -118,13 +124,12 @@ def profil():
 
         conn.execute('''
             UPDATE profil SET firma=?, ulice=?, mesto=?, ico=?, dic=?, ucet=?, logo=? WHERE uzivatel=?
-        ''', (firma, ulice, mesto, ico, dic, ucet, logo_filename, session['uzivatel']))
+        ''', (firma, ulice, mesto, ico, dic, ucet, logo_filename, aktualni_uzivatel))
         conn.commit()
         flash('Profil byl úspěšně aktualizován', 'success')
         return redirect(url_for('profil'))
 
-    # Načtení profilu podle přihlášeného uživatele
-    data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (session['uzivatel'],)).fetchone()
+    data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
     conn.close()
     return render_template('profil.html', profil=data_profilu)
 
