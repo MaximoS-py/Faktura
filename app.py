@@ -31,6 +31,31 @@ def login_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
+# === NOVÝ ENDPOINT PRO GENEROVÁNÍ QR KÓDU ===
+@app.route('/get-qr')
+def get_qr():
+    """Generuje QR platbu přes oficiální bezplatné API qr-platba.cz."""
+    account = request.args.get('account', '')
+    amount = request.args.get('amount', '0')
+    vs = request.args.get('vs', '')
+
+    # Odstranění lomítka z čísla účtu pro formát QR platby (např. 123456/0100 -> 123456*0100)
+    formatted_account = account.replace('/', '*')
+    
+    # Sestavení řetězce pro QR platbu
+    qr_string = f"https://qr-platba.cz{formatted_account}&amount={amount}&currency=CZK&vs={vs}"
+    
+    try:
+        response = requests.get(qr_string, timeout=5)
+        if response.status_code == 200:
+            return send_file(io.BytesIO(response.content), mimetype='image/png')
+    except Exception as e:
+        print(f"Chyba při stahování QR kódu: {e}")
+        
+    # Záložní prázdná odpověď v případě výpadku API
+    return "QR kód se nepodařilo vygenerovat", 500
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -52,7 +77,7 @@ def index():
     conn = get_db()
     faktury = conn.execute('SELECT * FROM faktury ORDER BY id DESC').fetchall()
     conn.close()
-    return render_template('index.html', faktury=faktury)
+    return render_template('index.html', faktu=faktury)
 
 @app.route('/profil', methods=['GET', 'POST'])
 @login_required
@@ -232,5 +257,4 @@ def odeslat_email(id):
 
     return redirect(url_for('faktura_detail', id=id))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if name == 'main':app.run(debug=True)
