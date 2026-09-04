@@ -4,50 +4,21 @@
     <meta charset="UTF-8">
     <title>{% block title %}Fakturační systém{% endblock %}</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f3f4f6; margin: 0; padding: 0; color: #1f2937; }
-        .nav { background: #1e3a8a; padding: 15px; color: white; display: flex; justify-content: space-between; align-items: center; }
-        .nav a { color: white; text-decoration: none; margin-right: 15px; font-weight: bold; }
-        .nav .right a { background: #ef4444; padding: 5px 10px; border-radius: 4px; }
-        .wrapper { max-width: 1000px; margin: 30px auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .btn { background: #2563eb; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; font-weight: bold; }
-        .btn-sec { background: #4b5563; }
-        .btn-danger { background: #ef4444; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: left; }
-        th { background: #f9fafb; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"], input[type="number"], input[type="date"], textarea, input[type="file"] { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .flash { padding: 10px; background: #d1fae5; color: #065f46; margin-bottom: 15px; border-radius: 4px; }
+        body { font-family: 'Segoe UI', sans-serif; background:#f3f4f6; margin:0; padding:20px; }
+        .flash { margin:10px auto; max-width:800px; padding:10px; border-radius:4px; }
+        .flash.error { background:#fee2e2; color:#b91c1c; }
+        .flash.success { background:#dcfce7; color:#166534; }
     </style>
-    {% block head %}{% endblock %}
 </head>
 <body>
-    {% if session.get('user_id') %}
-    <div class="nav">
-        <div>
-            <a href="{{ url_for('index') }}">🗂️ Přehled faktur</a>
-            <a href="{{ url_for('nova_faktura') }}">➕ Nová faktura</a>
-            <a href="{{ url_for('profil') }}">⚙️ Můj Profil / Logo</a>
-        </div>
-        <div class="right">
-            <span>Uživatel: {{ session.get('username') }}</span> | 
-            <a href="{{ url_for('logout') }}">Odhlásit se</a>
-        </div>
-    </div>
-    {% endif %}
-    
-    <div class="wrapper">
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for message in messages %}
-              <div class="flash">{{ message }}</div>
-            -- {% endfor %}
-          {% endif %}
-        {% endwith %}
-        
-        {% block content %}{% endblock %}
-    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
 </body>
 </html>
