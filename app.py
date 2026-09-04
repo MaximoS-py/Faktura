@@ -13,54 +13,16 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from xhtml2pdf import pisa
 
-# Načtení externích modulů
 import config
 from database import get_db, init_db
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 app.config['UPLOAD_FOLDER'] = config.UPLOAD_FOLDER
-os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Inicializace struktury DB
+# Inicializace DB
 init_db()
-
-# AUTOMATICKÁ AKTUALIZACE DATABÁZE
-try:
-    conn = get_db()
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS uzivatele (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-except Exception:
-    pass
-finally:
-    if 'conn' in locals():
-        conn.close()
-
-try:
-    conn = get_db()
-    conn.execute('ALTER TABLE faktury ADD COLUMN uzivatel TEXT DEFAULT "admin";')
-    conn.commit()
-except Exception:
-    pass
-finally:
-    if 'conn' in locals():
-        conn.close()
-
-try:
-    conn = get_db()
-    conn.execute('ALTER TABLE profil ADD COLUMN uzivatel TEXT DEFAULT "admin";')
-    conn.commit()
-except Exception:
-    pass
-finally:
-    if 'conn' in locals():
-        conn.close()
 
 
 def login_required(f):
@@ -73,9 +35,6 @@ def login_required(f):
     return wrapper
 
 
-# ---------------------------------------------------------
-# QR KÓD – OPRAVENO
-# ---------------------------------------------------------
 @app.route('/get-qr')
 def get_qr():
     account = request.args.get('account', '')
@@ -98,9 +57,6 @@ def get_qr():
     return "QR kód se nepodařilo vygenerovat", 500
 
 
-# ---------------------------------------------------------
-# REGISTRACE
-# ---------------------------------------------------------
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -142,9 +98,6 @@ def register():
     return render_template('register.html')
 
 
-# ---------------------------------------------------------
-# LOGIN
-# ---------------------------------------------------------
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -156,10 +109,6 @@ def login():
         conn.close()
 
         if user and check_password_hash(user['password_hash'], password):
-            session['logged_in'] = True
-            session['uzivatel'] = username
-            return redirect(url_for('index'))
-        elif username == 'admin' and password == 'admin123':
             session['logged_in'] = True
             session['uzivatel'] = username
             return redirect(url_for('index'))
@@ -175,14 +124,11 @@ def logout():
     return redirect(url_for('login'))
 
 
-# ---------------------------------------------------------
-# INDEX
-# ---------------------------------------------------------
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    aktualni_uzivatel = session.get('uzivatel')
     faktury = conn.execute(
         'SELECT * FROM faktury WHERE uzivatel = ? ORDER BY id DESC',
         (aktualni_uzivatel,)
@@ -191,16 +137,13 @@ def index():
     return render_template('index.html', faktury=faktury)
 
 
-# ---------------------------------------------------------
-# PROFIL – OPRAVENO (nepřepisuje účet)
-# ---------------------------------------------------------
 @app.route('/profil', methods=['GET', 'POST'])
 @login_required
 def profil():
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    aktualni_uzivatel = session.get('uzivatel')
 
-    data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
 
     if request.method == 'POST':
         firma = request.form['firma']
@@ -210,36 +153,40 @@ def profil():
         dic = request.form['dic']
 
         ucet = request.form['ucet'].strip()
-        if not ucet:
-            ucet = data_profilu['ucet']
+        if not ucet and profil_data:
+            ucet = profil_data['ucet']
 
         file = request.files.get('logo')
-        logo_filename = request.form.get('current_logo', data_profilu['logo'])
+        logo_filename = request.form.get('current_logo', profil_data['logo'] if profil_data else '')
         if file and file.filename != '':
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             logo_filename = filename
 
-        conn.execute('''
-            UPDATE profil SET firma=?, ulice=?, mesto=?, ico=?, dic=?, ucet=?, logo=? WHERE uzivatel=?
-        ''', (firma, ulice, mesto, ico, dic, ucet, logo_filename, aktualni_uzivatel))
+        if profil_data:
+            conn.execute('''
+                UPDATE profil SET firma=?, ulice=?, mesto=?, ico=?, dic=?, ucet=?, logo=? WHERE uzivatel=?
+            ''', (firma, ulice, mesto, ico, dic, ucet, logo_filename, aktualni_uzivatel))
+        else:
+            conn.execute('''
+                INSERT INTO profil (uzivatel, firma, ulice, mesto, ico, dic, ucet, logo)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (aktualni_uzivatel, firma, ulice, mesto, ico, dic, ucet, logo_filename))
+
         conn.commit()
         conn.close()
         flash('Profil byl úspěšně aktualizován', 'success')
         return redirect(url_for('profil'))
 
     conn.close()
-    return render_template('profil.html', profil=data_profilu)
+    return render_template('profil.html', profil=profil_data)
 
 
-# ---------------------------------------------------------
-# NOVÁ FAKTURA
-# ---------------------------------------------------------
 @app.route('/nova-faktura', methods=['GET', 'POST'])
 @login_required
 def nova_faktura():
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    aktualni_uzivatel = session.get('uzivatel')
 
     if request.method == 'POST':
         cislo = request.form['cislo_faktury']
@@ -299,27 +246,20 @@ def nova_faktura():
             conn.close()
             return redirect(url_for('nova_faktura'))
 
-    try:
-        data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
-    except Exception:
-        data_profilu = None
-    finally:
-        conn.close()
-
-    return render_template('formular.html', profil=data_profilu)
+    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+    conn.close()
+    return render_template('formular.html', profil=profil_data)
 
 
-# ---------------------------------------------------------
-# DETAIL FAKTURY
-# ---------------------------------------------------------
 @app.route('/faktura/<int:id>')
 @login_required
 def faktura_detail(id):
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    aktualni_uzivatel = session.get('uzivatel')
     try:
         faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, aktualni_uzivatel)).fetchone()
         if not faktura:
+            flash("Faktura nenalezena.", "error")
             return redirect(url_for('index'))
 
         polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
@@ -329,9 +269,6 @@ def faktura_detail(id):
         conn.close()
 
 
-# ---------------------------------------------------------
-# SMAZÁNÍ FAKTURY
-# ---------------------------------------------------------
 @app.route('/faktura/<int:id>/smazat', methods=['POST'])
 @login_required
 def smazat_fakturu(id):
@@ -346,15 +283,15 @@ def smazat_fakturu(id):
     return redirect(url_for('index'))
 
 
-# ---------------------------------------------------------
-# ZMĚNA STAVU FAKTURY
-# ---------------------------------------------------------
 @app.route('/faktura/<int:id>/zmenit-stav', methods=['POST'])
 @login_required
 def zmenit_stav(id):
     conn = get_db()
     try:
         faktura = conn.execute('SELECT stav FROM faktury WHERE id=?', (id,)).fetchone()
+        if not faktura:
+            flash("Faktura nenalezena.", "error")
+            return redirect(url_for('index'))
         novy_st = "Zaplaceno" if faktura['stav'] != "Zaplaceno" else "Nezaplaceno"
         conn.execute('UPDATE faktury SET stav=? WHERE id=?', (novy_st, id))
         conn.commit()
@@ -364,20 +301,21 @@ def zmenit_stav(id):
     return redirect(url_for('index'))
 
 
-# ---------------------------------------------------------
-# ODESLÁNÍ FAKTURY E-MAILEM
-# ---------------------------------------------------------
 @app.route('/faktura/<int:id>/odeslat', methods=['POST'])
 @login_required
 def odeslat_email(id):
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel', 'admin')
+    aktualni_uzivatel = session.get('uzivatel')
     try:
-        faktura = conn.execute('SELECT * FROM faktury WHERE id=?', (id,)).fetchone()
+        faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, aktualni_uzivatel)).fetchone()
         polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
         profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
     finally:
         conn.close()
+
+    if not faktura or not profil_data:
+        flash("Chybí data faktury nebo profilu.", "error")
+        return redirect(url_for('index'))
 
     if not faktura['odberatel_email']:
         flash('Chyba: Odběratel nemá vyplněný e-mail!', 'error')
