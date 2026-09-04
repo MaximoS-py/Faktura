@@ -21,7 +21,6 @@ app.secret_key = config.SECRET_KEY
 app.config['UPLOAD_FOLDER'] = config.UPLOAD_FOLDER
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Inicializace DB
 init_db()
 
 
@@ -52,7 +51,7 @@ def get_qr():
         if response.status_code == 200:
             return send_file(io.BytesIO(response.content), mimetype='image/png')
     except Exception as e:
-        print(f"Chyba při stahování QR kódu: {e}")
+        print("QR ERROR:", e)
 
     return "QR kód se nepodařilo vygenerovat", 500
 
@@ -70,10 +69,6 @@ def register():
             flash('Uživatelské jméno a heslo jsou povinné!', 'error')
             return render_template('register.html')
 
-        if not ucet:
-            flash('Bankovní účet je povinný!', 'error')
-            return render_template('register.html')
-
         hashed_password = generate_password_hash(password)
 
         conn = get_db()
@@ -83,14 +78,14 @@ def register():
                 (username, hashed_password)
             )
             conn.execute('''
-                INSERT INTO profil (uzivatel, firma, ulice, mesto, ico, dic, ucet, logo) 
+                INSERT INTO profil (uzivatel, firma, ulice, mesto, ico, dic, ucet, logo)
                 VALUES (?, ?, "", "", ?, "", ?, "")
             ''', (username, firma, ico, ucet))
 
             conn.commit()
-            flash('Registrace byla úspěšná! Nyní se můžete přihlásit.', 'success')
+            flash('Registrace byla úspěšná!', 'success')
             return redirect(url_for('login'))
-        except Exception:
+        except Exception as e:
             flash('Uživatelské jméno je již obsazené.', 'error')
         finally:
             conn.close()
@@ -128,10 +123,10 @@ def logout():
 @login_required
 def index():
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel')
+    uzivatel = session['uzivatel']
     faktury = conn.execute(
         'SELECT * FROM faktury WHERE uzivatel = ? ORDER BY id DESC',
-        (aktualni_uzivatel,)
+        (uzivatel,)
     ).fetchall()
     conn.close()
     return render_template('index.html', faktury=faktury)
@@ -141,9 +136,9 @@ def index():
 @login_required
 def profil():
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel')
+    uzivatel = session['uzivatel']
 
-    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (uzivatel,)).fetchone()
 
     if request.method == 'POST':
         firma = request.form['firma']
@@ -151,14 +146,12 @@ def profil():
         mesto = request.form['mesto']
         ico = request.form['ico']
         dic = request.form['dic']
-
-        ucet = request.form['ucet'].strip()
-        if not ucet and profil_data:
-            ucet = profil_data['ucet']
+        ucet = request.form['ucet']
 
         file = request.files.get('logo')
-        logo_filename = request.form.get('current_logo', profil_data['logo'] if profil_data else '')
-        if file and file.filename != '':
+        logo_filename = profil_data['logo'] if profil_data else ""
+
+        if file and file.filename:
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
             logo_filename = filename
@@ -166,16 +159,16 @@ def profil():
         if profil_data:
             conn.execute('''
                 UPDATE profil SET firma=?, ulice=?, mesto=?, ico=?, dic=?, ucet=?, logo=? WHERE uzivatel=?
-            ''', (firma, ulice, mesto, ico, dic, ucet, logo_filename, aktualni_uzivatel))
+            ''', (firma, ulice, mesto, ico, dic, ucet, logo_filename, uzivatel))
         else:
             conn.execute('''
                 INSERT INTO profil (uzivatel, firma, ulice, mesto, ico, dic, ucet, logo)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (aktualni_uzivatel, firma, ulice, mesto, ico, dic, ucet, logo_filename))
+            ''', (uzivatel, firma, ulice, mesto, ico, dic, ucet, logo_filename))
 
         conn.commit()
         conn.close()
-        flash('Profil byl úspěšně aktualizován', 'success')
+        flash("Profil uložen.", "success")
         return redirect(url_for('profil'))
 
     conn.close()
@@ -186,7 +179,7 @@ def profil():
 @login_required
 def nova_faktura():
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel')
+    uzivatel = session['uzivatel']
 
     if request.method == 'POST':
         cislo = request.form['cislo_faktury']
@@ -198,7 +191,6 @@ def nova_faktura():
         o_email = request.form['odberatel_email']
         forma_uhrady = request.form['forma_uhrady']
         prenesena_dan = request.form.get('prenesena_dan', 'NE')
-        stav = "Nezaplaceno"
 
         popisy = request.form.getlist('popis[]')
         mnozstvi_list = request.form.getlist('mnozstvi[]')
@@ -206,47 +198,42 @@ def nova_faktura():
         dph_list = request.form.getlist('dph[]')
 
         total_price = 0
-        polozky_to_save = []
+        polozky = []
 
         for i in range(len(popisy)):
-            if popisy[i].strip() != '':
-                mnozstvi = float(mnozstvi_list[i]) if mnozstvi_list[i] else 0
-                cena = float(ceny_list[i]) if ceny_list[i] else 0
-                sazba_dph = float(dph_list[i]) if i < len(dph_list) and dph_list[i] else 21.0
+            if popisy[i].strip():
+                mnozstvi = float(mnozstvi_list[i])
+                cena = float(ceny_list[i])
+                dph = float(dph_list[i])
 
                 zaklad = mnozstvi * cena
-                if prenesena_dan == 'ANO':
-                    cena_s_dph = zaklad
-                else:
-                    cena_s_dph = zaklad * (1 + (sazba_dph / 100))
+                celkem = zaklad if prenesena_dan == "ANO" else zaklad * (1 + dph / 100)
 
-                total_price += cena_s_dph
-                polozky_to_save.append((popisy[i], mnozstvi, cena, sazba_dph))
+                total_price += celkem
+                polozky.append((popisy[i], mnozstvi, cena, dph))
 
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO faktury (uzivatel, cislo_faktury, datum_vystaveni, datum_splatnosti, odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email, forma_uhrady, stav, prenesena_dan, total_price)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (aktualni_uzivatel, cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email, forma_uhrady, stav, prenesena_dan, total_price))
-            faktura_id = cursor.lastrowid
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO faktury (uzivatel, cislo_faktury, datum_vystaveni, datum_splatnosti,
+                                 odberatel_firma, odberatel_adresa, odberatel_ico, odberatel_email,
+                                 forma_uhrady, stav, prenesena_dan, total_price)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (uzivatel, cislo, vystaveni, splatnost, o_firma, o_adresa, o_ico, o_email,
+              forma_uhrady, "Nezaplaceno", prenesena_dan, total_price))
 
-            for p in polozky_to_save:
-                conn.execute('''
-                    INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (faktura_id, p[0], p[1], p[2], p[3]))
+        faktura_id = cursor.lastrowid
 
-            conn.commit()
-            return redirect(url_for('faktura_detail', id=faktura_id))
-        except Exception as e:
-            print(f"Chyba při zápisu faktury: {e}")
-            flash("Chyba při ukládání faktury do databáze.", "error")
-        finally:
-            conn.close()
-            return redirect(url_for('nova_faktura'))
+        for p in polozky:
+            conn.execute('''
+                INSERT INTO polozky_faktury (faktura_id, popis, mnozstvi, cena_ks, dph)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (faktura_id, p[0], p[1], p[2], p[3]))
 
-    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
+        conn.commit()
+        conn.close()
+        return redirect(url_for('faktura_detail', id=faktura_id))
+
+    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (uzivatel,)).fetchone()
     conn.close()
     return render_template('formular.html', profil=profil_data)
 
@@ -255,114 +242,18 @@ def nova_faktura():
 @login_required
 def faktura_detail(id):
     conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel')
-    try:
-        faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, aktualni_uzivatel)).fetchone()
-        if not faktura:
-            flash("Faktura nenalezena.", "error")
-            return redirect(url_for('index'))
+    uzivatel = session['uzivatel']
 
-        polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
-        profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
-        return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data)
-    finally:
-        conn.close()
-
-
-@app.route('/faktura/<int:id>/smazat', methods=['POST'])
-@login_required
-def smazat_fakturu(id):
-    conn = get_db()
-    try:
-        conn.execute('DELETE FROM polozky_faktury WHERE faktura_id=?', (id,))
-        conn.execute('DELETE FROM faktury WHERE id=?', (id,))
-        conn.commit()
-        flash('Faktura byla úspěšně smazána.', 'success')
-    finally:
-        conn.close()
-    return redirect(url_for('index'))
-
-
-@app.route('/faktura/<int:id>/zmenit-stav', methods=['POST'])
-@login_required
-def zmenit_stav(id):
-    conn = get_db()
-    try:
-        faktura = conn.execute('SELECT stav FROM faktury WHERE id=?', (id,)).fetchone()
-        if not faktura:
-            flash("Faktura nenalezena.", "error")
-            return redirect(url_for('index'))
-        novy_st = "Zaplaceno" if faktura['stav'] != "Zaplaceno" else "Nezaplaceno"
-        conn.execute('UPDATE faktury SET stav=? WHERE id=?', (novy_st, id))
-        conn.commit()
-        flash(f"Stav faktury změněn na: {novy_st}", 'success')
-    finally:
-        conn.close()
-    return redirect(url_for('index'))
-
-
-@app.route('/faktura/<int:id>/odeslat', methods=['POST'])
-@login_required
-def odeslat_email(id):
-    conn = get_db()
-    aktualni_uzivatel = session.get('uzivatel')
-    try:
-        faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, aktualni_uzivatel)).fetchone()
-        polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
-        profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
-    finally:
-        conn.close()
-
-    if not faktura or not profil_data:
-        flash("Chybí data faktury nebo profilu.", "error")
+    faktura = conn.execute('SELECT * FROM faktury WHERE id=? AND uzivatel=?', (id, uzivatel)).fetchone()
+    if not faktura:
+        flash("Faktura nenalezena.", "error")
         return redirect(url_for('index'))
 
-    if not faktura['odberatel_email']:
-        flash('Chyba: Odběratel nemá vyplněný e-mail!', 'error')
-        return redirect(url_for('faktura_detail', id=id))
+    polozky = conn.execute('SELECT * FROM polozky_faktury WHERE faktura_id=?', (id,)).fetchall()
+    profil_data = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (uzivatel,)).fetchone()
 
-    try:
-        qr_url = url_for('get_qr',
-                         account=profil_data['ucet'],
-                         amount=faktura['total_price'],
-                         vs=faktura['cislo_faktury'],
-                         _external=True)
-
-        html_rendered = render_template('faktura.html',
-                                        faktura=faktura,
-                                        polozky=polozky,
-                                        profil=profil_data,
-                                        qr_override=qr_url)
-
-        pdf_buffer = io.BytesIO()
-        pisa.CreatePDF(io.StringIO(html_rendered), dest=pdf_buffer)
-        pdf_buffer.seek(0)
-
-        msg = MIMEMultipart()
-        msg['From'] = config.SMTP_UZIVATEL
-        msg['To'] = faktura['odberatel_email']
-        msg['Subject'] = f"Faktura č. {faktura['cislo_faktury']} - {profil_data['firma']}"
-
-        body = f"Dobrý den,\n\nv příloze Vám zasíláme fakturu č. {faktura['cislo_faktury']}.\n\nS pozdravem,\n{profil_data['firma']}"
-        msg.attach(MIMEText(body, 'plain'))
-
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload(pdf_buffer.read())
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', f"attachment; filename=faktura_{faktura['cislo_faktury']}.pdf")
-        msg.attach(part)
-
-        server = smtplib.SMTP(config.SMTP_SERVER, config.SMTP_PORT)
-        server.starttls()
-        server.login(config.SMTP_UZIVATEL, config.SMTP_HESLO)
-        server.sendmail(config.SMTP_UZIVATEL, faktura['odberatel_email'], msg.as_string())
-        server.quit()
-
-        flash('E-mail s fakturou byl úspěšně odeslán.', 'success')
-    except Exception as e:
-        flash(f"Chyba při odesílání e-mailu: {str(e)}", 'error')
-
-    return redirect(url_for('faktura_detail', id=id))
+    conn.close()
+    return render_template('faktura.html', faktura=faktura, polozky=polozky, profil=profil_data)
 
 
 if __name__ == '__main__':
