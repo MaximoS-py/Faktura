@@ -9,7 +9,7 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
 
-    # Vytvoření tabulky uživatelů
+    # Tabulka uživatelů
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS uzivatele (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +18,7 @@ def init_db():
         );
     """)
 
-    # Vytvoření tabulky profilů
+    # Tabulka profilů
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS profil (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +33,7 @@ def init_db():
         );
     """)
 
-    # Vytvoření tabulky faktur
+    # Tabulka faktur
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS faktury (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +52,7 @@ def init_db():
         );
     """)
 
-    # Vytvoření tabulky položek faktur
+    # Tabulka položek faktur
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS polozky_faktury (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
