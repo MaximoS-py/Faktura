@@ -2,209 +2,60 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nová Faktura</title>
+    <title>Nová faktura</title>
     <style>
-        :root { --primary: #2563eb; --success: #10b981; --text: #1f2937; }
-        body { font-family: 'Segoe UI', Roboto, sans-serif; color: var(--text); background: #f3f4f6; margin: 0; padding: 20px; }
-        .nav { max-width: 800px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; }
-        .nav a { color: var(--primary); text-decoration: none; font-weight: bold; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { margin-top: 0; color: var(--primary); border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 20px; }
-        .section-title { font-weight: bold; text-transform: uppercase; font-size: 0.85rem; color: #6b7280; margin-bottom: 10px; }
-        label { display: block; font-weight: bold; font-size: 0.9rem; margin-bottom: 4px; color: #4b5563; }
-        input, textarea, select { width: 100%; border: 1px solid #d1d5db; padding: 10px; border-radius: 4px; box-sizing: border-box; margin-bottom: 12px; font-family: inherit; font-size: 0.95rem; background: white; }
-        .ares-box { display: flex; gap: 8px; }
-        .btn-ares { background: var(--success); color: white; border: none; padding: 0 15px; border-radius: 4px; cursor: pointer; font-weight: bold; white-space: nowrap; height: 41px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #f9fafb; text-align: left; padding: 10px; border-bottom: 2px solid #e5e7eb; color: #4b5563; }
-        td { padding: 10px; border-bottom: 1px solid #e5e7eb; }
-        .actions { margin-top: 20px; display: flex; gap: 10px; }
-        button.btn-main { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 1rem; }
-        button.btn-sec { background: #4b5563; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
-        button:hover { opacity: 0.9; }
+        body { font-family: Arial; background:#f3f4f6; padding:20px; }
+        .box { max-width:800px; margin:auto; background:white; padding:30px; border-radius:8px; }
+        input { width:100%; padding:10px; margin-bottom:15px; }
+        button { padding:10px 20px; background:#2563eb; color:white; border:none; }
+        table { width:100%; border-collapse:collapse; }
+        th, td { padding:10px; border-bottom:1px solid #ddd; }
     </style>
 </head>
 <body>
 
-<div class="nav">
-    <a href="{{ url_for('index') }}">⬅ Zpět na přehled</a>
-    <div>Přihlášen jako: <strong>admin</strong> | <a href="{{ url_for('logout') }}">Odhlásit se</a></div>
-</div>
+<div class="box">
+    <h2>Nová faktura</h2>
 
-<div class="container">
-    <h1>Vystavit novou fakturu</h1>
-    
-    <form action="{{ url_for('nova_faktura') }}" method="POST">
-        <!-- Hlavička a termíny -->
-        <div class="grid">
-            <div>
-                <label>Číslo faktury</label>
-                <input type="text" name="cislo_faktury" placeholder="Např. 20260001" required>
-            </div>
-            <div>
-                <div class="grid" style="gap: 10px; margin-bottom: 0;">
-                    <div>
-                        <label>Datum vystavení</label>
-                        <input type="date" name="datum_vystaveni" required>
-                    </div>
-                    <div>
-                        <label>Datum splatnosti</label>
-                        <input type="date" name="datum_splatnosti" required>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <form method="POST">
 
-        <!-- Výběr formy úhrady -->
-        <div style="margin-bottom: 20px;">
-            <label for="forma_uhrady">Forma úhrady</label>
-            <select name="forma_uhrady" id="forma_uhrady">
-                <option value="Bankovní převod (QR kód)">Bankovní převod (QR kód)</option>
-                <option value="Hotově">Hotově</option>
-                <option value="Platební kartou">Platební kartou</option>
-                <option value="Dobírka">Dobírka</option>
-            </select>
-        </div>
+        <h3>Základní údaje</h3>
+        <input type="text" name="cislo_faktury" placeholder="Číslo faktury" required>
+        <input type="date" name="datum_vystaveni" required>
+        <input type="date" name="datum_splatnosti" required>
 
-        <!-- Zaškrtávací políčko pro přenesenou daňovou povinnost -->
-        <div style="margin-bottom: 25px; background: #eff6ff; padding: 15px; border-radius: 4px; border: 1px solid #bfdbfe;">
-            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin-bottom: 0;">
-                <input type="checkbox" name="prenesena_dan" value="ANO" style="width: auto; margin: 0;">
-                <strong style="color: #1e40af;">Režim přenesené daňové povinnosti</strong> (DPH přizná a odvede zákazník)
-            </label>
-        </div>
+        <h3>Odběratel</h3>
+        <input type="text" name="odberatel_firma" placeholder="Firma" required>
+        <input type="text" name="odberatel_adresa" placeholder="Adresa" required>
+        <input type="text" name="odberatel_ico" placeholder="IČO" required>
+        <input type="email" name="odberatel_email" placeholder="E-mail">
 
-        <!-- Subjekty (Dodavatel a Odběratel) -->
-        <div class="grid">
-            <!-- Pevná data z Vašeho profilu -->
-            <div>
-                <div class="section-title">Dodavatel (Vy)</div>
-                <div style="background: #f9fafb; padding: 15px; border-radius: 4px; border: 1px solid #e5e7eb; font-size: 0.95rem; line-height: 1.5;">
-                    <strong>{{ profil.firma }}</strong><br>
-                    {{ profil.ulice }}<br>
-                    {{ profil.mesto }}<br><br>
-                    <strong>IČO:</strong> {{ profil.ico }} | <strong>DIČ:</strong> {{ profil.dic }}
-                </div>
-            </div>
-            
-            <!-- Vyplňování odběratele + ARES -->
-            <div>
-                <div class="section-title">Odběratel</div>
-                
-                <label>IČO Odběratele</label>
-                <div class="ares-box">
-                    <input type="text" id="odberatel_ico" name="odberatel_ico" placeholder="Zadejte 8místné IČO" maxlength="8">
-                    <button type="button" class="btn-ares" onclick="nacistZAresu()">Načíst z ARES</button>
-                </div>
+        <h3>Položky</h3>
+        <table>
+            <tr>
+                <th>Popis</th>
+                <th>Množství</th>
+                <th>Cena</th>
+                <th>DPH %</th>
+            </tr>
 
-                <label>Název firmy / Jméno</label>
-                <input type="text" id="odberatel_firma" name="odberatel_firma" placeholder="Obchodní jméno" required>
-
-                <label>Adresa sídla</label>
-                <textarea id="odberatel_adresa" name="odberatel_adresa" placeholder="Ulice, č.p., PSČ a Město" rows="2" required></textarea>
-
-                <label>E-mail Odběratele (pro zaslání faktury)</label>
-                <input type="email" id="odberatel_email" name="odberatel_email" placeholder="klient@firma.cz">
-            </div>
-        </div>
-
-        <!-- Položky faktury s volbou DPH -->
-        <div class="section-title" style="margin-top: 30px;">Položky faktury (ceny zadávejte bez DPH)</div>
-        <table id="items-table">
-            <thead>
-                <tr>
-                    <th style="width: 45%;">Popis služby / zboží</th>
-                    <th style="width: 12%;">Množství</th>
-                    <th style="width: 20%;">Cena za ks (bez DPH)</th>
-                    <th style="width: 18%;">Sazba DPH</th>
-                    <th style="width: 5%;"></th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><input type="text" name="popis[]" placeholder="Např. Konzultační činnost" required></td>
-                    <td><input type="number" name="mnozstvi[]" value="1" min="0.1" step="any" required></td>
-                    <td><input type="number" name="cena[]" value="0" min="0" step="any" required></td>
-                    <td>
-                        <select name="dph[]" style="margin-bottom: 0;">
-                            <option value="21">21 % (Základní)</option>
-                            <option value="12">12 % (Snížená)</option>
-                            <option value="0">0 % (Osvobozeno)</option>
-                        </select>
-                    </td>
-                    <td><button type="button" class="btn-sec" onclick="smazatRadek(this)" style="padding: 5px 10px;">X</button></td>
-                </tr>
-            </tbody>
+            {% for i in range(5) %}
+            <tr>
+                <td><input name="popis[]"></td>
+                <td><input name="mnozstvi[]" type="number" step="0.01"></td>
+                <td><input name="cena[]" type="number" step="0.01"></td>
+                <td><input name="dph[]" type="number" value="21"></td>
+            </tr>
+            {% endfor %}
         </table>
-        
-        <div class="actions">
-            <button type="button" class="btn-sec" onclick="pridatRadek()">+ Přidat položku</button>
-        </div>
 
-        <!-- Odeslání formuláře -->
-        <div class="actions" style="justify-content: flex-end; margin-top: 40px; border-top: 2px solid #e5e7eb; padding-top: 20px;">
-            <button type="submit" class="btn-main">Vystavit a uložit fakturu</button>
-        </div>
+        <p>Přenesená daň: <input type="checkbox" name="prenesena_dan" value="ANO"></p>
+
+        <button>Vytvořit fakturu</button>
     </form>
+
+    <p><a href="{{ url_for('index') }}">Zpět</a></p>
 </div>
 
-<script>
-    // Načítání dat ze státního registru ARES Ministerstva financí ČR
-    function nacistZAresu() {
-        const icoInput = document.getElementById('odberatel_ico').value.trim();
-        if (icoInput.length !== 8 || isNaN(icoInput)) {
-            alert('Prosím zadejte validní 8místné IČO.');
-            return;
-        }
-
-        fetch(`/ares/${icoInput}`)
-            .then(res => {
-                if (!res.ok) throw new Error('Subjekt nebyl v registru nalezen.');
-                return res.json();
-            })
-            .then(data => {
-                document.getElementById('odberatel_firma').value = data.firma;
-                document.getElementById('odberatel_adresa').value = data.adresa;
-            })
-            .catch(err => alert(err.message));
-    }
-
-    // Dynamické přidávání řádků položek do tabulky
-    function pridatRadek() {
-        const tbody = document.getElementById('items-table').getElementsByTagName('tbody')[0];
-        const row = tbody.insertRow();
-        row.innerHTML = `
-            <td><input type="text" name="popis[]" placeholder="Např. Konzultační činnost" required></td>
-            <td><input type="number" name="mnozstvi[]" value="1" min="0.1" step="any" required></td>
-            <td><input type="number" name="cena[]" value="0" min="0" step="any" required></td>
-            <td>
-                <select name="dph[]" style="margin-bottom: 0;">
-                    <option value="21">21 % (Základní)</option>
-                    <option value="12">12 % (Snížená)</option>
-                    <option value="0">0 % (Osvobozeno)</option>
-                </select>
-            </td>
-            <td><button type="button" class="btn-sec" onclick="smazatRadek(this)" style="padding: 5px 10px;">X</button></td>
-        `;
-    }
-
-    // Smazání řádku položky
-
-            function smazatRadek(btn) {
-            const tbody = document.getElementById('items-table').getElementsByTagName('tbody')[0];
-            if (tbody.rows.length > 1) {
-                const row = btn.parentNode.parentNode;
-                row.parentNode.removeChild(row);
-            } else {
-                alert('Faktura musí obsahovat alespoň jednu položku.');
-            }
-        }
-    </script>
-
 </body>
-
-</body>
-
 </html>

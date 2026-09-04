@@ -1,261 +1,51 @@
 <!DOCTYPE html>
 <html lang="cs">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Přehled faktur</title>
     <style>
-         :root {
-            --primary: #2563eb;
-            --danger: #ef4444;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --text: #1f2937;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            color: var(--text);
-            background: #f3f4f6;
-            margin: 0;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-        
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #e5e7eb;
-            padding-bottom: 15px;
-            margin-bottom: 25px;
-        }
-        
-        h1 {
-            margin: 0;
-            color: var(--primary);
-        }
-        
-        .nav-links a {
-            margin-left: 15px;
-            text-decoration: none;
-            font-weight: bold;
-            color: var(--primary);
-        }
-        
-        .btn-new {
-            background: var(--primary);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            text-decoration: none;
-            font-weight: bold;
-            display: inline-block;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        
-        th {
-            background: #f9fafb;
-            padding: 12px;
-            text-align: left;
-            border-bottom: 2px solid #e5e7eb;
-            font-weight: bold;
-            color: #4b5563;
-        }
-        
-        td {
-            padding: 12px;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        /* Styly pro barevné stavy faktur */
-        
-        .badge {
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.85rem;
-            display: inline-block;
-        }
-        
-        .badge-zaplaceno {
-            background: #d1fae5;
-            color: #065f46;
-        }
-        
-        .badge-nezaplaceno {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-        
-        .badge-posplatnosti {
-            background: #ffedd5;
-            color: #9a3412;
-            border: 1px solid var(--danger);
-        }
-        
-        .btn-action {
-            text-decoration: none;
-            background: #e5e7eb;
-            color: #1f2937;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.9rem;
-            margin-right: 5px;
-            display: inline-block;
-            border: none;
-            cursor: pointer;
-        }
-        
-        .btn-action:hover {
-            background: #d1d5db;
-        }
-        
-        .btn-status {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-        
-        .btn-status:hover {
-            background: #bfdbfe;
-        }
-        
-        .btn-delete {
-            background: var(--danger);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.9rem;
-            cursor: pointer;
-        }
-        
-        .btn-delete:hover {
-            opacity: 0.9;
-        }
-        
-        .flash {
-            background: #d1fae5;
-            color: #065f46;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            font-weight: bold;
-        }
+        body { font-family: Arial; background:#f3f4f6; padding:20px; }
+        table { width:100%; border-collapse:collapse; background:white; }
+        th, td { padding:10px; border-bottom:1px solid #ddd; }
+        a { color:#2563eb; }
+        .top { display:flex; justify-content:space-between; margin-bottom:20px; }
     </style>
 </head>
-
 <body>
 
-    <div class="container">
-        <div class="header">
-            <h1>Fakturační Nástěnka</h1>
-            <div class="nav-links">
-                <a href="{{ url_for('profil') }}">⚙ Můj Profil</a>
-                <a href="{{ url_for('logout') }}" style="color: #6b7280;">Odhlásit se</a>
-            </div>
-        </div>
-
-        {% with messages = get_flashed_messages() %} {% if messages %} {% for msg in messages %}
-        <div class="flash">{{ msg }}</div>
-        {% endfor %} {% endif %} {% endwith %}
-
-        <div style="margin-bottom: 20px;">
-            <a href="{{ url_for('nova_faktura') }}" class="btn-new">+ Vystavit novou fakturu</a>
-        </div>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>Číslo faktury</th>
-                    <th>Odběratel</th>
-                    <th>Splatnost</th>
-                    <th>Celková částka</th>
-                    <th>Stav</th>
-                    <th style="width: 250px;">Akce</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for faktura in faktury %}
-                <tr>
-                    <td><strong>{{ faktura.cislo_faktury }}</strong></td>
-                    <td>{{ faktura.odberatel_firma }}</td>
-                    <!-- Přidáno data-date pro JavaScriptovou kontrolu splatnosti -->
-                    <td class="datum-splatnosti" data-date="{{ faktura.datum_splatnosti }}">{{ faktura.datum_splatnosti }}</td>
-                    <td><strong>{{ "{:,.2f}".format(faktura.total_price).replace(",", " ").replace(".", ",") }} Kč</strong></td>
-                    <td>
-                        <!-- Dynamický výpis stavu -->
-                        {% if faktura.stav == 'Zaplaceno' %}
-                        <span class="badge badge-zaplaceno">✓ Zaplaceno</span> {% else %}
-                        <span class="badge badge-nezaplaceno" id="badge-{{ faktura.id }}">✗ Nezaplaceno</span> {% endif %}
-                    </td>
-                    <td>
-                        <a href="{{ url_for('faktura_detail', id=faktura.id) }}" class="btn-action">Zobrazit</a>
-
-                        <!-- Tlačítko pro rychlé přepnutí stavu -->
-                        <form action="{{ url_for('zmenit_stav', id=faktura.id) }}" method="POST" style="display:inline;">
-                            <button type="submit" class="btn-action btn-status">
-                            {{ 'Označit jako dlužné' if faktura.stav == 'Zaplaceno' else '✓ Zaplaceno' }}
-                        </button>
-                        </form>
-
-                        <form action="{{ url_for('smazat_fakturu', id=faktura.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Opravdu chcete fakturu č. {{ faktura.cislo_faktury }} trvale smazat?');">
-                            <button type="submit" class="btn-delete">Smazat</button>
-                        </form>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="6" style="text-align: center; color: #6b7280; padding: 30px;">Zatím jste nevystavili žádné faktury.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<div class="top">
+    <div>Přihlášen: <strong>{{ session['uzivatel'] }}</strong></div>
+    <div>
+        <a href="{{ url_for('profil') }}">Profil</a> |
+        <a href="{{ url_for('logout') }}">Odhlásit</a>
     </div>
+</div>
 
-    <!-- JAVASCRIPT: Automatická kontrola, zda faktura neprošlo datem splatnosti -->
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const dnes = new Date();
-            dnes.setHours(0, 0, 0, 0); // Očištění od času pro přesné srovnání dní
+<h2>Moje faktury</h2>
 
-            document.querySelectorAll('.datum-splatnosti').forEach(td => {
-                const rawDate = td.getAttribute('data-date');
-                if (!rawDate) return;
+<a href="{{ url_for('nova_faktura') }}">+ Nová faktura</a>
 
-                const datumSplatnosti = new Date(rawDate);
-                datumSplatnosti.setHours(0, 0, 0, 0);
+<table>
+    <tr>
+        <th>Číslo</th>
+        <th>Datum</th>
+        <th>Odběratel</th>
+        <th>Celkem</th>
+        <th>Akce</th>
+    </tr>
 
-                // Pokud je splatnost v minulosti
-                if (datumSplatnosti < dnes) {
-                    const radek = td.parentNode;
-                    const badge = radek.querySelector('.badge-nezaplaceno');
-
-                    // Pokud faktura současně NENÍ zaplacená, přepíšeme štítek na 'Po splatnosti'
-                    if (badge) {
-                        badge.innerText = "⚠ Po splatnosti";
-                        badge.className = "badge badge-posplatnosti";
-                    }
-                }
-            });
-        });
-    </script>
+    {% for f in faktury %}
+    <tr>
+        <td>{{ f.cislo_faktury }}</td>
+        <td>{{ f.datum_vystaveni }}</td>
+        <td>{{ f.odberatel_firma }}</td>
+        <td>{{ "%.2f"|format(f.total_price) }} Kč</td>
+        <td>
+            <a href="{{ url_for('faktura_detail', id=f.id) }}">Detail</a>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
 
 </body>
-
 </html>

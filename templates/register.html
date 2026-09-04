@@ -2,19 +2,19 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>Přihlášení</title>
+    <title>Registrace</title>
     <style>
         body { font-family: Arial; background:#f3f4f6; padding:40px; }
-        .box { max-width:400px; margin:auto; background:white; padding:30px; border-radius:8px; }
+        .box { max-width:450px; margin:auto; background:white; padding:30px; border-radius:8px; }
         input { width:100%; padding:10px; margin-bottom:15px; }
-        button { width:100%; padding:10px; background:#2563eb; color:white; border:none; }
+        button { width:100%; padding:10px; background:#16a34a; color:white; border:none; }
         a { color:#2563eb; }
     </style>
 </head>
 <body>
 
 <div class="box">
-    <h2>Přihlášení</h2>
+    <h2>Registrace</h2>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
@@ -25,10 +25,16 @@
     <form method="POST">
         <input type="text" name="username" placeholder="Uživatelské jméno" required>
         <input type="password" name="password" placeholder="Heslo" required>
-        <button>Přihlásit</button>
+
+        <h3>Firemní údaje</h3>
+        <input type="text" name="firma" placeholder="Název firmy" required>
+        <input type="text" name="ico" placeholder="IČO" required>
+        <input type="text" name="ucet" placeholder="Číslo účtu (např. 123456789/0100)" required>
+
+        <button>Registrovat</button>
     </form>
 
-    <p>Nemáte účet? <a href="{{ url_for('register') }}">Registrace</a></p>
+    <p>Máte účet? <a href="{{ url_for('login') }}">Přihlásit se</a></p>
 </div>
 
 </body>

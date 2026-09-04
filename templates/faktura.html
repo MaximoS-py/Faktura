@@ -1,326 +1,57 @@
 <!DOCTYPE html>
 <html lang="cs">
-
 <head>
     <meta charset="UTF-8">
-    <title>Faktura č. {{ faktura.cislo_faktury }}</title>
+    <title>Faktura</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            color: #1f2937;
-            line-height: 1.4;
-            background: #f3f4f6;
-            margin: 0;
-            padding: 20px;
-        }
-        
-        .nav-bar {
-            max-width: 800px;
-            margin: 0 auto 20px auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .nav-bar a {
-            color: #2563eb;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        
-        .invoice-card {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 50px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            box-sizing: border-box;
-        }
-        
-        .header-table {
-            width: 100%;
-            margin-bottom: 30px;
-            border-collapse: collapse;
-        }
-        
-        .header-table td {
-            vertical-align: top;
-            border: none;
-            padding: 0;
-        }
-        
-        .invoice-title {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #2563eb;
-            margin: 0 0 5px 0;
-        }
-        
-        .logo-img {
-            max-height: 70px;
-            max-width: 200px;
-            object-fit: contain;
-        }
-        
-        .address-grid {
-            width: 100%;
-            margin-bottom: 40px;
-            border-collapse: collapse;
-        }
-        /* OPRAVENO: Přidán tiskový fix print-color-adjust, aby Windows pozadí nesmazal */
-        
-        .address-grid td {
-            width: 50%;
-            vertical-align: top;
-            padding: 15px;
-            border: 1px solid #e5e7eb;
-            background-color: #f9fafb !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        
-        .address-grid td.nobg {
-            background-color: #ffffff !important;
-        }
-        
-        .section-title {
-            font-weight: bold;
-            text-transform: uppercase;
-            font-size: 0.8rem;
-            color: #6b7280;
-            margin-bottom: 8px;
-            border-bottom: 1px solid #e5e7eb;
-            padding-bottom: 4px;
-        }
-        
-        .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .items-table th {
-            background: #2563eb;
-            color: white;
-            text-align: left;
-            padding: 10px;
-            font-size: 0.9rem;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        
-        .items-table td {
-            padding: 12px 10px;
-            border-bottom: 1px solid #e5e7eb;
-            font-size: 0.95rem;
-        }
-        
-        .footer-layout {
-            width: 100%;
-            margin-top: 40px;
-            border-collapse: collapse;
-        }
-        
-        .footer-layout td {
-            vertical-align: bottom;
-            border: none;
-            padding: 0;
-        }
-        
-        .total-box {
-            background: #f3f4f6;
-            border: 2px solid #2563eb;
-            padding: 15px;
-            text-align: right;
-            font-size: 1.4rem;
-            font-weight: bold;
-            border-radius: 4px;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        
-        .total-label {
-            font-size: 0.9rem;
-            font-weight: normal;
-            display: block;
-            color: #4b5563;
-            margin-bottom: 5px;
-        }
-        
-        .qr-code {
-            width: 140px;
-            height: 140px;
-            border: 1px solid #e5e7eb;
-            padding: 5px;
-            border-radius: 4px;
-            display: block;
-            margin-top: 10px;
-        }
-        
-        .actions-panel {
-            max-width: 800px;
-            margin: 20px auto 0 auto;
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-        }
-        
-        .btn {
-            border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 0.95rem;
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        .btn-print {
-            background: #2563eb;
-            color: white;
-        }
-        
-        .btn:hover {
-            opacity: 0.9;
-        }
-        /* OPRAVENO: Odstraněno vynucené přepisování pozadí na bílou, které schovávalo dodavatele */
-        
-        @media print {
-            body {
-                background: white;
-                padding: 0;
-            }
-            .invoice-card {
-                box-shadow: none;
-                padding: 0;
-            }
-            .nav-bar,
-            .actions-panel {
-                display: none !important;
-            }
-        }
+        body { font-family: Arial; background:#f3f4f6; padding:20px; }
+        .box { max-width:800px; margin:auto; background:white; padding:30px; border-radius:8px; }
+        table { width:100%; border-collapse:collapse; }
+        th, td { padding:10px; border-bottom:1px solid #ddd; }
+        button { padding:10px 20px; background:#2563eb; color:white; border:none; }
+        a { color:#2563eb; }
     </style>
 </head>
-
 <body>
 
-    <div class="nav-bar">
-        <a href="{{ url_for('index') }}">⬅ Zpět na přehled</a>
-    </div>
+<div class="box">
+    <h2>Faktura č. {{ faktura.cislo_faktury }}</h2>
 
-    <div class="invoice-card">
-        <!-- Hlavička dokumentu s logem -->
-        <table class="header-table">
-            <tr>
-                <td>
-                    <div class="invoice-title">FAKTURA - DAŇOVÝ DOKLAD</div>
-                    <div style="font-size: 1.1rem; color: #4b5563;">Číslo dokladu: <strong>{{ faktura.cislo_faktury }}</strong></div>
-                </td>
-                <td style="text-align: right;">
-                    {% if profil.logo %}
-                    <img src="{{ url_for('static', filename='uploads/' + profil.logo) }}" class="logo-img" alt="Logo"> {% endif %}
-                </td>
-            </tr>
-        </table>
+    <h3>Dodavatel</h3>
+    <p>{{ profil.firma }}<br>
+       {{ profil.ulice }}<br>
+       {{ profil.mesto }}<br>
+       IČO: {{ profil.ico }}<br>
+       Účet: {{ profil.ucet }}</p>
 
-        <!-- Data a lhůty -->
-        <table style="width: 100%; margin-bottom: 20px; font-size: 0.95rem;">
-            <tr>
-                <td>Datum vystavení: <strong>{{ faktura.datum_vystaveni }}</strong></td>
-                <td style="text-align: right;">Datum splatnosti: <strong style="color: #ef4444;">{{ faktura.datum_splatnosti }}</strong></td>
-            </tr>
-        </table>
+    <h3>Odběratel</h3>
+    <p>{{ faktura.odberatel_firma }}<br>
+       {{ faktura.odberatel_adresa }}<br>
+       IČO: {{ faktura.odberatel_ico }}</p>
 
-        <!-- Adresy firem -->
-        <table class="address-grid">
-            <tr>
-                <td>
-                    <div class="section-title">Dodavatel</div>
-                    <strong>{{ profil.firma }}</strong><br> {{ profil.ulice }}<br> {{ profil.mesto }}<br><br>
-                    <strong>IČO:</strong> {{ profil.ico }}<br>
-                    <strong>DIČ:</strong> {{ profil.dic }}
-                </td>
-                <td class="nobg">
-                    <div class="section-title">Odběratel</div>
-                    <strong>{{ faktura.odberatel_firma }}</strong><br> {{ faktura.odberatel_adresa | replace('\n', '<br>') | safe }}<br><br> {% if faktura.odberatel_ico %}
-                    <strong>IČO:</strong> {{ faktura.odberatel_ico }} {% endif %}
-                </td>
-            </tr>
-        </table>
+    <h3>Položky</h3>
+    <table>
+        <tr>
+            <th>Popis</th>
+            <th>Množství</th>
+            <th>Cena</th>
+            <th>DPH</th>
+        </tr>
 
-        <!-- Výpis položek faktury -->
-            <!-- Výpis položek faktury s rozpadem na DPH -->
-    <table class="items-table">
-        <thead>
-            <tr>
-                <th>Popis položky</th>
-                <th style="text-align: center; width: 10%;">Množství</th>
-                <th style="text-align: right; width: 15%;">Cena / ks</th>
-                <th style="text-align: center; width: 10%;">DPH</th>
-                <th style="text-align: right; width: 15%;">Základ</th>
-                <th style="text-align: right; width: 15%;">Celkem</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for polozka in polozky %}
-            {% set zaklad = polozka.mnozstvi * polozka.cena_ks %}
-            {% if faktura.prenesena_dan == 'ANO' %}
-                {% set celkem_polozka = zaklad %}
-            {% else %}
-                {% set celkem_polozka = zaklad * (1 + (polozka.dph / 100)) %}
-            {% endif %}
-            <tr>
-                <td>{{ polozka.popis }}</td>
-                <td style="text-align: center;">{{ polozka.mnozstvi }}</td>
-                <td style="text-align: right;">{{ "{:,.2f}".format(polozka.cena_ks).replace(",", " ").replace(".", ",") }} Kč</td>
-                <td style="text-align: center;">{{ polozka.dph }} %</td>
-                <td style="text-align: right;">{{ "{:,.2f}".format(zaklad).replace(",", " ").replace(".", ",") }} Kč</td>
-                <td style="text-align: right; font-weight: bold;">{{ "{:,.2f}".format(celkem_polozka).replace(",", " ").replace(".", ",") }} Kč</td>
-            </tr>
-            {% endfor %}
-        </tbody>
+        {% for p in polozky %}
+        <tr>
+            <td>{{ p.popis }}</td>
+            <td>{{ p.mnozstvi }}</td>
+            <td>{{ p.cena_ks }}</td>
+            <td>{{ p.dph }} %</td>
+        </tr>
+        {% endfor %}
     </table>
 
-    {# Pokud je zapnutá přenesená daň, zobrazíme legislativní text #}
-    {% if faktura.prenesena_dan == 'ANO' %}
-        <div style="background: #f3f4f6; padding: 15px; border-radius: 4px; border: 1px solid #d1d5db; font-size: 0.9rem; margin-bottom: 20px; font-weight: bold;">
-            ⚠️ Režim přenesené daňové povinnosti. Výši daně je povinen doplnit a odvést zákazník (odběratel).
-        </div>
-    {% endif %}
+    <h3>Celkem: {{ "%.2f"|format(faktura.total_price) }} Kč</h3>
 
-
-        <!-- Spodní sekce: Platební informace a Finální součet -->
-        <table class="footer-layout">
-            <tr>
-                <!-- Platební údaje a QR kód - zobrazí se POUZE při bankovním převodu -->
-                <td>
-                    <div class="section-title" style="width: 250px;">Platební informace</div>
-                    <div style="font-size: 0.95rem; margin-bottom: 10px; line-height: 1.6;">
-                        Forma úhrady: <strong>{{ faktura.forma_uhrady if faktura.forma_uhrady else 'Bankovní převod' }}</strong><br> {% if not faktura.forma_uhrady or 'Bankovní' in faktura.forma_uhrady %} Číslo účtu: <strong>{{ profil.ucet }}</strong><br>                        Variabilní symbol: <strong>{{ faktura.cislo_faktury }}</strong> {% endif %}
-                    </div>
-
-                    {# QR kód vykreslíme pouze v případě, že se platí převodem #} {% if not faktura.forma_uhrady or 'Bankovní' in faktura.forma_uhrady %}
-                    <!-- Načtení QR kódu z opravené Python funkce -->
-                    <img class="qr-code" src="/qr?account={{ profil.ucet }}&amount={{ faktura.total_price }}&vs={{ faktura.cislo_faktury }}" alt="QR Kód"> {% endif %}
-                </td>
-
-                <!-- Box s celkovou částkou -->
-                <td style="text-align: right; width: 50%;">
-                    <div class="total-box">
-                        <span class="total-label">Celkem k úhradě</span> {{ "{:,.2f}".format(faktura.total_price).replace(",", " ").replace(".", ",") }} Kč
-                    </div>
-                </td>
-            </tr>
-        </table>
-
-
-        <div class="actions-panel">
-            <button class="btn btn-print" onclick="window.print()">Vytisknout / Uložit do PDF</button>
-        </div>
+    <p><a href="{{ url_for('index') }}">Zpět</a></p>
+</div>
 
 </body>
-
 </html>
