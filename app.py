@@ -25,7 +25,7 @@ os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
 # Inicializace struktury DB
 init_db()
 
-# AUTOMATICKÁ AKTUALIZACE DATABÁZE (Bezpečně ošetřená)
+# AUTOMATICKÁ AKTUALIZACE DATABÁZE
 try:
     conn = get_db()
     conn.execute('''
@@ -47,7 +47,6 @@ try:
     conn.execute('ALTER TABLE faktury ADD COLUMN uzivatel TEXT DEFAULT "admin";')
     conn.commit()
 except Exception:
-    # Sloupec už existuje, nevadí
     pass
 finally:
     if 'conn' in locals():
@@ -58,7 +57,6 @@ try:
     conn.execute('ALTER TABLE profil ADD COLUMN uzivatel TEXT DEFAULT "admin";')
     conn.commit()
 except Exception:
-    # Sloupec už existuje, nevadí
     pass
 finally:
     if 'conn' in locals():
@@ -75,9 +73,11 @@ def login_required(f):
     return wrapper
 
 
+# ---------------------------------------------------------
+# QR KÓD – OPRAVENO
+# ---------------------------------------------------------
 @app.route('/get-qr')
 def get_qr():
-    """Generuje QR platbu přes oficiální bezplatné API s opraveným kódováním textu."""
     account = request.args.get('account', '')
     amount = request.args.get('amount', '0')
     vs = request.args.get('vs', '')
@@ -86,7 +86,6 @@ def get_qr():
     payment_data = f"SPD*1.0*ACC:{formatted_account}*AM:{amount}*CC:CZK*X-VS:{vs}"
     encoded_data = urllib.parse.quote(payment_data, safe='')
 
-    # Opravené API URL
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={encoded_data}"
 
     try:
@@ -99,6 +98,9 @@ def get_qr():
     return "QR kód se nepodařilo vygenerovat", 500
 
 
+# ---------------------------------------------------------
+# REGISTRACE
+# ---------------------------------------------------------
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -140,6 +142,9 @@ def register():
     return render_template('register.html')
 
 
+# ---------------------------------------------------------
+# LOGIN
+# ---------------------------------------------------------
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -170,6 +175,9 @@ def logout():
     return redirect(url_for('login'))
 
 
+# ---------------------------------------------------------
+# INDEX
+# ---------------------------------------------------------
 @app.route('/')
 @login_required
 def index():
@@ -183,13 +191,15 @@ def index():
     return render_template('index.html', faktury=faktury)
 
 
+# ---------------------------------------------------------
+# PROFIL – OPRAVENO (nepřepisuje účet)
+# ---------------------------------------------------------
 @app.route('/profil', methods=['GET', 'POST'])
 @login_required
 def profil():
     conn = get_db()
     aktualni_uzivatel = session.get('uzivatel', 'admin')
 
-    # Načtení aktuálního profilu
     data_profilu = conn.execute('SELECT * FROM profil WHERE uzivatel=?', (aktualni_uzivatel,)).fetchone()
 
     if request.method == 'POST':
@@ -200,12 +210,11 @@ def profil():
         dic = request.form['dic']
 
         ucet = request.form['ucet'].strip()
-        # Pokud uživatel nechá účet prázdný, ponecháme původní
-        if not ucet and data_profilu:
+        if not ucet:
             ucet = data_profilu['ucet']
 
         file = request.files.get('logo')
-        logo_filename = request.form.get('current_logo', data_profilu['logo'] if data_profilu else '')
+        logo_filename = request.form.get('current_logo', data_profilu['logo'])
         if file and file.filename != '':
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
@@ -215,14 +224,17 @@ def profil():
             UPDATE profil SET firma=?, ulice=?, mesto=?, ico=?, dic=?, ucet=?, logo=? WHERE uzivatel=?
         ''', (firma, ulice, mesto, ico, dic, ucet, logo_filename, aktualni_uzivatel))
         conn.commit()
-        flash('Profil byl úspěšně aktualizován', 'success')
         conn.close()
+        flash('Profil byl úspěšně aktualizován', 'success')
         return redirect(url_for('profil'))
 
     conn.close()
     return render_template('profil.html', profil=data_profilu)
 
 
+# ---------------------------------------------------------
+# NOVÁ FAKTURA
+# ---------------------------------------------------------
 @app.route('/nova-faktura', methods=['GET', 'POST'])
 @login_required
 def nova_faktura():
@@ -297,6 +309,9 @@ def nova_faktura():
     return render_template('formular.html', profil=data_profilu)
 
 
+# ---------------------------------------------------------
+# DETAIL FAKTURY
+# ---------------------------------------------------------
 @app.route('/faktura/<int:id>')
 @login_required
 def faktura_detail(id):
@@ -314,6 +329,9 @@ def faktura_detail(id):
         conn.close()
 
 
+# ---------------------------------------------------------
+# SMAZÁNÍ FAKTURY
+# ---------------------------------------------------------
 @app.route('/faktura/<int:id>/smazat', methods=['POST'])
 @login_required
 def smazat_fakturu(id):
@@ -328,6 +346,9 @@ def smazat_fakturu(id):
     return redirect(url_for('index'))
 
 
+# ---------------------------------------------------------
+# ZMĚNA STAVU FAKTURY
+# ---------------------------------------------------------
 @app.route('/faktura/<int:id>/zmenit-stav', methods=['POST'])
 @login_required
 def zmenit_stav(id):
@@ -343,6 +364,9 @@ def zmenit_stav(id):
     return redirect(url_for('index'))
 
 
+# ---------------------------------------------------------
+# ODESLÁNÍ FAKTURY E-MAILEM
+# ---------------------------------------------------------
 @app.route('/faktura/<int:id>/odeslat', methods=['POST'])
 @login_required
 def odeslat_email(id):
@@ -360,7 +384,6 @@ def odeslat_email(id):
         return redirect(url_for('faktura_detail', id=id))
 
     try:
-        # QR pro e-mail (override do šablony)
         qr_url = url_for('get_qr',
                          account=profil_data['ucet'],
                          amount=faktura['total_price'],
