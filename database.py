@@ -1,15 +1,20 @@
 import sqlite3
+import os
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "database.db")
+
 
 def get_db():
-    conn = sqlite3.connect('faktury.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
 
-    # Tabulka uživatelů
+    # Uživatelé
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS uzivatele (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +23,7 @@ def init_db():
         );
     """)
 
-    # Tabulka profilů
+    # Profil dodavatele
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS profil (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +38,7 @@ def init_db():
         );
     """)
 
-    # Tabulka faktur
+    # Faktury
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS faktury (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +57,7 @@ def init_db():
         );
     """)
 
-    # Tabulka položek faktur
+    # Položky faktur
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS polozky_faktury (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
