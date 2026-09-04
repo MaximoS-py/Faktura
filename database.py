@@ -3,18 +3,15 @@ import os
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "database.db")
 
-
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
 
-    # Uživatelé
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS uzivatele (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +20,6 @@ def init_db():
         );
     """)
 
-    # Profil dodavatele
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS profil (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,7 +34,6 @@ def init_db():
         );
     """)
 
-    # Faktury
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS faktury (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +52,6 @@ def init_db():
         );
     """)
 
-    # Položky faktur
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS polozky_faktury (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
